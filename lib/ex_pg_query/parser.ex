@@ -20,11 +20,12 @@ defmodule ExPgQuery.Parser do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
          {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
       nodes = NodeTraversal.nodes(protobuf)
+      initial_result = %Result{protobuf: protobuf}
 
       result =
-        Enum.reduce(nodes, %Result{protobuf: protobuf}, fn node, acc ->
+        Enum.reduce(nodes, initial_result, fn node, acc ->
           case node do
-            {%PgQuery.RangeVar{} = node, %Ctx{current_cte: {current_cte, is_recursive}} = ctx} ->
+            {%PgQuery.RangeVar{} = node, %Ctx{} = ctx} ->
               table =
                 case node do
                   %PgQuery.RangeVar{schemaname: "", relname: relname} ->
@@ -34,11 +35,17 @@ defmodule ExPgQuery.Parser do
                     "#{schemaname}.#{relname}"
                 end
 
+              {current_cte, is_recursive} =
+                case ctx.current_cte do
+                  nil -> {nil, false}
+                  {cte, is_recursive} -> {cte, is_recursive}
+                end
+
               # if `current_cte != table` then it's an actual table, unless it's a recursive CTE
               if Enum.member?(acc.cte_names, table) && (current_cte != table || is_recursive) do
                 acc
               else
-                %Result{acc | tables: [{table, ctx.type} | acc.tables]}
+                %Result{acc | tables: [table | acc.tables]}
               end
 
             {%PgQuery.FuncCall{} = node, %Ctx{}} ->
@@ -64,11 +71,12 @@ defmodule ExPgQuery.Parser do
                   sval
                 end)
 
-              case field do
-                [f1, f2] -> {f2, f1}
-                [f1] -> {nil, f1}
-                _ -> nil
-              end
+              field =
+                case field do
+                  [f1, f2] -> {f2, f1}
+                  [f1] -> {nil, f1}
+                  _ -> nil
+                end
 
               if field do
                 %Result{acc | filter_columns: [field | acc.filter_columns]}
@@ -85,5 +93,11 @@ defmodule ExPgQuery.Parser do
     else
       {:error, reason} -> {:error, reason}
     end
+  end
+
+  def statement_types(%Result{protobuf: %PgQuery.ParseResult{stmts: stmts}}) do
+    Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {stmt_type, _}}} ->
+      stmt_type
+    end)
   end
 end

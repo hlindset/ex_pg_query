@@ -18,7 +18,6 @@ defmodule ExPgQuery.NodeTraversal do
       %{stmt: %{node: {_type, node}}} ->
         traverse_node(node, %Ctx{})
         |> List.flatten()
-        |> Enum.reverse()
 
       _ ->
         []
@@ -30,7 +29,7 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   defp traverse_node(%PgQuery.SelectStmt{} = node, ctx) do
-    updated_ctx = %Ctx{ctx | depth: ctx.depth + 1, type: :select}
+    updated_ctx = %Ctx{inc_depth(ctx) | type: :select}
 
     [
       traverse_nodes(node.target_list, updated_ctx),
@@ -58,15 +57,15 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp traverse_node(%PgQuery.ResTarget{} = node, ctx) do
     [
-      traverse_maybe_node(node.val, %Ctx{depth: ctx.depth + 1}),
-      {node, %Ctx{ctx | depth: ctx.depth + 1}}
+      traverse_maybe_node(node.val, inc_depth(ctx)),
+      {node, ctx}
     ]
   end
 
   defp traverse_node(%PgQuery.FuncCall{} = node, ctx) do
     [
-      traverse_nodes(node.args, %Ctx{ctx | depth: ctx.depth + 1}),
-      {node, %Ctx{ctx | depth: ctx.depth + 1}}
+      traverse_nodes(node.args, inc_depth(ctx)),
+      {node, ctx}
     ]
   end
 
@@ -83,9 +82,8 @@ defmodule ExPgQuery.NodeTraversal do
       traverse_node(
         node.ctequery,
         %Ctx{
-          ctx
-          | depth: ctx.depth + 1,
-            current_cte: {node.ctename, node.cterecursive}
+          inc_depth(ctx)
+          | current_cte: {node.ctename, node.cterecursive}
         }
       ),
       {node, ctx}
@@ -96,6 +94,44 @@ defmodule ExPgQuery.NodeTraversal do
     [{node, ctx}]
   end
 
+  defp traverse_node(%PgQuery.A_Expr{} = node, ctx) do
+    [
+      traverse_maybe_node(node.lexpr, inc_depth(ctx)),
+      traverse_maybe_node(node.rexpr, inc_depth(ctx)),
+      {node, ctx}
+    ]
+  end
+
+  defp traverse_node(%PgQuery.A_Const{} = node, ctx) do
+    [{node, ctx}]
+  end
+
+  defp traverse_node(%PgQuery.RangeSubselect{} = node, ctx) do
+    [
+      traverse_maybe_node(node.subquery, inc_depth(ctx)),
+      {node, ctx}
+    ]
+  end
+
+  defp traverse_node(%PgQuery.ParamRef{} = node, ctx) do
+    [{node, ctx}]
+  end
+
+  defp traverse_node(%PgQuery.SubLink{} = node, ctx) do
+    [
+      traverse_maybe_node(node.subselect, inc_depth(ctx)),
+      {node, ctx}
+    ]
+  end
+
+  defp traverse_node(%PgQuery.JoinExpr{} = node, ctx) do
+    [
+      traverse_maybe_node(node.larg, inc_depth(ctx)),
+      traverse_maybe_node(node.rarg, inc_depth(ctx)),
+      traverse_maybe_node(node.quals, inc_depth(ctx)),
+      {node, ctx}
+    ]
+  end
 
   defp traverse_maybe_node(nil, _ctx), do: []
 
@@ -105,5 +141,9 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp traverse_nodes(nodes, ctx) when is_list(nodes) do
     Enum.flat_map(nodes, &traverse_maybe_node(&1, ctx))
+  end
+
+  defp inc_depth(%Ctx{depth: depth} = ctx) do
+    %Ctx{ctx | depth: depth + 1}
   end
 end
