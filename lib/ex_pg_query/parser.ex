@@ -35,17 +35,16 @@ defmodule ExPgQuery.Parser do
                     "#{schemaname}.#{relname}"
                 end
 
-              {current_cte, is_recursive} =
-                case ctx.current_cte do
-                  nil -> {nil, false}
-                  {cte, is_recursive} -> {cte, is_recursive}
-                end
+              is_cte_name = Enum.member?(acc.cte_names, table) || ctx.current_cte == table
 
-              # if `current_cte != table` then it's an actual table, unless it's a recursive CTE
-              if Enum.member?(acc.cte_names, table) && (current_cte != table || is_recursive) do
-                acc
-              else
-                %Result{acc | tables: [table | acc.tables]}
+              cond do
+                # we're outside a cte, so it's a cte reference
+                is_cte_name && ctx.current_cte == nil -> acc
+                # we're inside a recursive cte, so it's a cte's reference to itself
+                is_cte_name && ctx.current_cte == table && ctx.is_recursive_cte -> acc
+                # otherwise, it's a cte's reference to a table with the same name
+                # or just a table reference
+                true -> %Result{acc | tables: [table | acc.tables]}
               end
 
             {%PgQuery.FuncCall{} = node, %Ctx{}} ->
@@ -89,7 +88,15 @@ defmodule ExPgQuery.Parser do
           end
         end)
 
-      {:ok, result}
+      {:ok,
+       %Result{
+         result
+         | tables: Enum.uniq(result.tables),
+           cte_names: Enum.uniq(result.cte_names),
+           functions: Enum.uniq(result.functions),
+           aliases: Enum.uniq(result.aliases),
+           filter_columns: Enum.uniq(result.filter_columns)
+       }}
     else
       {:error, reason} -> {:error, reason}
     end

@@ -10,7 +10,8 @@ defmodule ExPgQuery.NodeTraversal do
     defstruct type: nil,
               depth: 0,
               has_filter: false,
-              current_cte: nil
+              current_cte: nil,
+              is_recursive_cte: false
   end
 
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
@@ -74,17 +75,14 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   defp traverse_node(%PgQuery.WithClause{} = node, ctx) do
-    traverse_nodes(node.ctes, ctx)
+    traverse_nodes(node.ctes, %Ctx{ctx | is_recursive_cte: node.recursive})
   end
 
   defp traverse_node(%PgQuery.CommonTableExpr{} = node, ctx) do
     [
       traverse_node(
         node.ctequery,
-        %Ctx{
-          inc_depth(ctx)
-          | current_cte: {node.ctename, node.cterecursive}
-        }
+        %Ctx{inc_depth(ctx) | current_cte: node.ctename}
       ),
       {node, ctx}
     ]
@@ -129,6 +127,20 @@ defmodule ExPgQuery.NodeTraversal do
       traverse_maybe_node(node.larg, inc_depth(ctx)),
       traverse_maybe_node(node.rarg, inc_depth(ctx)),
       traverse_maybe_node(node.quals, inc_depth(ctx)),
+      {node, ctx}
+    ]
+  end
+
+  defp traverse_node(%PgQuery.SortBy{} = node, ctx) do
+    [
+      traverse_maybe_node(node.node, inc_depth(ctx)),
+      {node, ctx}
+    ]
+  end
+
+  defp traverse_node(%PgQuery.NullTest{} = node, ctx) do
+    [
+      traverse_maybe_node(node.arg, inc_depth(ctx)),
       {node, ctx}
     ]
   end
