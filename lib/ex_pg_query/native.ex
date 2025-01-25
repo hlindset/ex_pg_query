@@ -14,4 +14,6 @@ defmodule ExPgQuery.Native do
 
   def parse_protobuf(_), do: exit(:nif_library_not_loaded)
   def deparse_protobuf(_), do: exit(:nif_library_not_loaded)
+  def fingerprint(_), do: exit(:nif_library_not_loaded)
+  def scan(_), do: exit(:nif_library_not_loaded)
 end

@@ -17,9 +17,14 @@
 // Helper function to create error tuples
 static ERL_NIF_TERM make_error(ErlNifEnv *env, const char *message)
 {
+  ERL_NIF_TERM binary;
+  size_t message_len = strlen(message);
+  unsigned char *binary_data = enif_make_new_binary(env, message_len, &binary);
+  memcpy(binary_data, message, message_len);
+
   return enif_make_tuple2(env,
-                          enif_make_atom(env, "error"),
-                          enif_make_string(env, message, ERL_NIF_UTF8));
+                         enif_make_atom(env, "error"),
+                         binary);
 }
 
 // Helper function to create success tuples
@@ -144,28 +149,28 @@ static ERL_NIF_TERM parse_protobuf(ErlNifEnv *env,
                                    int argc,
                                    const ERL_NIF_TERM argv[])
 {
-  ErlNifBinary input_binary;
+  ErlNifBinary query_binary;
 
   DEBUG_LOG("Starting parse_protobuf");
 
-  if (!validate_args(env, argc, argv, &input_binary))
+  if (!validate_args(env, argc, argv, &query_binary))
   {
     return enif_make_badarg(env);
   }
 
   // Create null-terminated string from input
-  char *query_str = (char *)malloc(input_binary.size + 1);
+  char *query_str = (char *)malloc(query_binary.size + 1);
   if (query_str == NULL)
   {
     DEBUG_LOG("Memory allocation failed for query string");
     return make_error(env, "Memory allocation failed");
   }
 
-  memcpy(query_str, input_binary.data, input_binary.size);
-  query_str[input_binary.size] = '\0';
+  memcpy(query_str, query_binary.data, query_binary.size);
+  query_str[query_binary.size] = '\0';
 
   // Parse the query
-  DEBUG_LOG("Parsing query of size %zu", input_binary.size);
+  DEBUG_LOG("Parsing query of size %zu", query_binary.size);
   PgQueryProtobufParseResult result = pg_query_parse_protobuf(query_str);
   free(query_str);
 
@@ -189,8 +194,122 @@ static ERL_NIF_TERM parse_protobuf(ErlNifEnv *env,
   return ok_term;
 }
 
+static ERL_NIF_TERM fingerprint(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+{
+    ErlNifBinary query_binary;
+
+    DEBUG_LOG("Starting fingerprint calculation");
+
+    if (!validate_args(env, argc, argv, &query_binary))
+    {
+        return enif_make_badarg(env);
+    }
+
+    // Create null-terminated string from input
+    char *query_str = (char *)malloc(query_binary.size + 1);
+    if (query_str == NULL)
+    {
+        DEBUG_LOG("Memory allocation failed for query string");
+        return make_error(env, "Memory allocation failed");
+    }
+
+    memcpy(query_str, query_binary.data, query_binary.size);
+    query_str[query_binary.size] = '\0';
+
+    // Calculate fingerprint
+    DEBUG_LOG("Calculating fingerprint for query of size %zu", query_binary.size);
+    PgQueryFingerprintResult result = pg_query_fingerprint(query_str);
+    free(query_str); // Free the query string as we don't need it anymore
+
+    if (result.error != NULL)
+    {
+        DEBUG_LOG("Fingerprint error: %s", result.error->message);
+        ERL_NIF_TERM error_term = make_error(env, result.error->message);
+        pg_query_free_fingerprint_result(result);
+        return error_term;
+    }
+
+    // Create result map
+    ERL_NIF_TERM map = enif_make_new_map(env);
+    ERL_NIF_TERM fingerprint_int, fingerprint_str;
+
+    // Convert uint64_t to ERL_NIF_TERM
+    // Note: using unsigned long long to ensure 64-bit compatibility
+    fingerprint_int = enif_make_uint64(env, (unsigned long long)result.fingerprint);
+
+    // Convert fingerprint string
+    unsigned char *str_binary = enif_make_new_binary(env, strlen(result.fingerprint_str), &fingerprint_str);
+    memcpy(str_binary, result.fingerprint_str, strlen(result.fingerprint_str));
+
+    // Build the return map with both values
+    if (!enif_make_map_put(env, map, enif_make_atom(env, "fingerprint"), fingerprint_int, &map) ||
+        !enif_make_map_put(env, map, enif_make_atom(env, "fingerprint_str"), fingerprint_str, &map))
+    {
+        DEBUG_LOG("Failed to create result map");
+        pg_query_free_fingerprint_result(result);
+        return make_error(env, "Failed to create result map");
+    }
+
+    DEBUG_LOG("Fingerprint calculation successful");
+    
+    // Create the final success tuple with the map
+    ERL_NIF_TERM ok_term = enif_make_tuple2(env,
+                                           enif_make_atom(env, "ok"),
+                                           map);
+
+    // Free the libpg_query result
+    pg_query_free_fingerprint_result(result);
+    
+    return ok_term;
+}
+
+static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+    ErlNifBinary query_binary;
+    
+    DEBUG_LOG("Starting scan");
+
+    if (!validate_args(env, argc, argv, &query_binary)) {
+        return enif_make_badarg(env);
+    }
+
+    // Create null-terminated string from input
+    char *query_str = (char *)malloc(query_binary.size + 1);
+    if (query_str == NULL) {
+        DEBUG_LOG("Memory allocation failed for query string");
+        return make_error(env, "Memory allocation failed");
+    }
+
+    memcpy(query_str, query_binary.data, query_binary.size);
+    query_str[query_binary.size] = '\0';
+
+    // Scan the query
+    DEBUG_LOG("Scanning query of size %zu", query_binary.size);
+    PgQueryScanResult result = pg_query_scan(query_str);
+    free(query_str); // Free the query string as we don't need it anymore
+
+    if (result.error != NULL) {
+        DEBUG_LOG("Scan error: %s", result.error->message);
+        ERL_NIF_TERM error_term = create_parse_error_map(env, result.error);
+        pg_query_free_scan_result(result);
+        return error_term;
+    }
+
+    // Create success term with the protobuf data
+    DEBUG_LOG("Scan successful");
+    ERL_NIF_TERM ok_term = make_success(env, 
+                                       (unsigned char *)result.pbuf.data,
+                                       result.pbuf.len);
+
+    // Free the scan result
+    pg_query_free_scan_result(result);
+    return ok_term;
+}
+
+
 static ErlNifFunc funcs[] = {
     {"parse_protobuf", 1, parse_protobuf},
-    {"deparse_protobuf", 1, deparse_protobuf}};
+    {"deparse_protobuf", 1, deparse_protobuf},
+    {"scan", 1, scan},
+    {"fingerprint", 1, fingerprint}};
 
 ERL_NIF_INIT(Elixir.ExPgQuery.Native, funcs, NULL, NULL, NULL, NULL)
