@@ -47,6 +47,13 @@ defmodule ExPgQuery.NodeTraversal do
       traverse_nodes(node.sort_clause, updated_ctx),
       traverse_nodes(node.group_clause, updated_ctx),
       traverse_maybe_node(node.having_clause, updated_ctx),
+      traverse_nodes(node.distinct_clause, updated_ctx),
+      traverse_maybe_node(node.into_clause, updated_ctx),
+      traverse_nodes(node.window_clause, updated_ctx),
+      traverse_nodes(node.values_lists, updated_ctx),
+      traverse_maybe_node(node.limit_offset, updated_ctx),
+      traverse_maybe_node(node.limit_count, updated_ctx),
+      traverse_nodes(node.locking_clause, updated_ctx),
       case node.op do
         :SETOP_NONE ->
           traverse_nodes(node.from_clause, updated_ctx)
@@ -65,15 +72,27 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp traverse_node(%PgQuery.ResTarget{} = node, ctx) do
     [
-      traverse_maybe_node(node.val, inc_depth(ctx)),
-      {node, ctx}
+      {node, ctx},
+      traverse_maybe_node(node.val, inc_depth(ctx))
+    ]
+  end
+
+  defp traverse_node(%PgQuery.WindowDef{} = node, ctx) do
+    [
+      {node, ctx},
+      traverse_nodes(node.partition_clause, inc_depth(ctx)),
+      traverse_nodes(node.order_clause, inc_depth(ctx))
     ]
   end
 
   defp traverse_node(%PgQuery.FuncCall{} = node, ctx) do
     [
+      {node, ctx},
       traverse_nodes(node.args, inc_depth(ctx)),
-      {node, ctx}
+      traverse_nodes(node.agg_order, inc_depth(ctx)),
+      # %Ctx{inc_depth(ctx) | has_filter: true}),
+      traverse_maybe_node(node.agg_filter, inc_depth(ctx)),
+      traverse_maybe_node(node.over, inc_depth(ctx))
     ]
   end
 
@@ -86,12 +105,11 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   defp traverse_node(%PgQuery.CommonTableExpr{} = node, ctx) do
+    cte_ctx = %Ctx{inc_depth(ctx) | current_cte: node.ctename}
+
     [
       {node, ctx},
-      traverse_node(
-        node.ctequery,
-        %Ctx{inc_depth(ctx) | current_cte: node.ctename}
-      )
+      traverse_node(node.ctequery, cte_ctx)
     ]
   end
 
@@ -151,7 +169,8 @@ defmodule ExPgQuery.NodeTraversal do
       {node, ctx},
       traverse_maybe_node(node.larg, inc_depth(ctx)),
       traverse_maybe_node(node.rarg, inc_depth(ctx)),
-      traverse_maybe_node(node.quals, inc_depth(ctx))
+      traverse_maybe_node(node.quals, inc_depth(ctx)),
+      traverse_maybe_node(node.alias, inc_depth(ctx))
     ]
   end
 
