@@ -10,7 +10,7 @@ defmodule ExPgQuery.Parser do
   defmodule Result do
     defstruct protobuf: nil,
               tables: [],
-              aliases: [],
+              table_aliases: [],
               cte_names: [],
               functions: [],
               filter_columns: []
@@ -37,14 +37,23 @@ defmodule ExPgQuery.Parser do
 
               is_cte_name = Enum.member?(acc.cte_names, table) || ctx.current_cte == table
 
-              cond do
-                # we're outside a cte, so it's a cte reference
-                is_cte_name && ctx.current_cte == nil -> acc
-                # we're inside a recursive cte, so it's a cte's reference to itself
-                is_cte_name && ctx.current_cte == table && ctx.is_recursive_cte -> acc
-                # otherwise, it's a cte's reference to a table with the same name
-                # or just a table reference
-                true -> %Result{acc | tables: [table | acc.tables]}
+              result =
+                cond do
+                  # we're outside a cte, so it's a cte reference
+                  is_cte_name && ctx.current_cte == nil -> acc
+                  # we're inside a recursive cte, so it's a cte's reference to itself
+                  is_cte_name && ctx.current_cte == table && ctx.is_recursive_cte -> acc
+                  # otherwise, it's a cte's reference to a table with the same name
+                  # or just a table reference
+                  true -> %Result{acc | tables: [table | acc.tables]}
+                end
+
+              case node.alias do
+                %PgQuery.Alias{aliasname: aliasname} ->
+                  %Result{result | table_aliases: [aliasname | result.table_aliases]}
+
+                nil ->
+                  result
               end
 
             {%PgQuery.FuncCall{} = node, %Ctx{}} ->
@@ -60,9 +69,6 @@ defmodule ExPgQuery.Parser do
             {%PgQuery.CommonTableExpr{} = node, _} ->
               %Result{acc | cte_names: [node.ctename | acc.cte_names]}
 
-            {%PgQuery.Alias{} = node, _} ->
-              %Result{acc | aliases: [node.aliasname | acc.aliases]}
-
             {%PgQuery.ColumnRef{} = node, %Ctx{has_filter: true}} ->
               field =
                 node.fields
@@ -72,8 +78,8 @@ defmodule ExPgQuery.Parser do
 
               field =
                 case field do
-                  [f1, f2] -> {f2, f1}
-                  [f1] -> {nil, f1}
+                  [tbl, fld] -> {tbl, fld}
+                  [fld] -> {nil, fld}
                   _ -> nil
                 end
 
@@ -94,7 +100,7 @@ defmodule ExPgQuery.Parser do
          | tables: Enum.uniq(result.tables),
            cte_names: Enum.uniq(result.cte_names),
            functions: Enum.uniq(result.functions),
-           aliases: Enum.uniq(result.aliases),
+           table_aliases: Enum.uniq(result.table_aliases),
            filter_columns: Enum.uniq(result.filter_columns)
        }}
     else

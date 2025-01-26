@@ -25,6 +25,10 @@ defmodule ExPgQuery.NodeTraversal do
     end)
   end
 
+  defp traverse_node(%PgQuery.Node{node: nil}, _ctx) do
+    []
+  end
+
   defp traverse_node(%PgQuery.Node{node: {_type, node}}, ctx) do
     traverse_node(node, ctx)
   end
@@ -33,12 +37,16 @@ defmodule ExPgQuery.NodeTraversal do
     updated_ctx = %Ctx{inc_depth(ctx) | type: :select}
 
     [
+      {node, ctx},
+      # the order here is important, because the CTEs are defined before
+      # the main query, so we need to traverse them first in order to
+      # have the correct list of cte names when traversing the main query
+      traverse_maybe_node(node.with_clause, updated_ctx),
       traverse_nodes(node.target_list, updated_ctx),
       traverse_maybe_node(node.where_clause, %Ctx{updated_ctx | has_filter: true}),
       traverse_nodes(node.sort_clause, updated_ctx),
       traverse_nodes(node.group_clause, updated_ctx),
       traverse_maybe_node(node.having_clause, updated_ctx),
-      traverse_maybe_node(node.with_clause, updated_ctx),
       case node.op do
         :SETOP_NONE ->
           traverse_nodes(node.from_clause, updated_ctx)
@@ -51,8 +59,7 @@ defmodule ExPgQuery.NodeTraversal do
 
         _ ->
           []
-      end,
-      {node, ctx}
+      end
     ]
   end
 
@@ -80,23 +87,26 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp traverse_node(%PgQuery.CommonTableExpr{} = node, ctx) do
     [
+      {node, ctx},
       traverse_node(
         node.ctequery,
         %Ctx{inc_depth(ctx) | current_cte: node.ctename}
-      ),
-      {node, ctx}
+      )
     ]
   end
 
   defp traverse_node(%PgQuery.RangeVar{} = node, ctx) do
-    [{node, ctx}]
+    [
+      {node, ctx},
+      traverse_maybe_node(node.alias, inc_depth(ctx))
+    ]
   end
 
   defp traverse_node(%PgQuery.A_Expr{} = node, ctx) do
     [
+      {node, ctx},
       traverse_maybe_node(node.lexpr, inc_depth(ctx)),
-      traverse_maybe_node(node.rexpr, inc_depth(ctx)),
-      {node, ctx}
+      traverse_maybe_node(node.rexpr, inc_depth(ctx))
     ]
   end
 
@@ -106,43 +116,95 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp traverse_node(%PgQuery.RangeSubselect{} = node, ctx) do
     [
+      {node, ctx},
       traverse_maybe_node(node.subquery, inc_depth(ctx)),
-      {node, ctx}
+      traverse_maybe_node(node.alias, inc_depth(ctx))
     ]
+  end
+
+  defp traverse_node(%PgQuery.Alias{} = node, ctx) do
+    [{node, ctx}]
   end
 
   defp traverse_node(%PgQuery.ParamRef{} = node, ctx) do
     [{node, ctx}]
   end
 
+  defp traverse_node(%PgQuery.RangeFunction{} = node, ctx) do
+    [
+      {node, ctx},
+      traverse_nodes(node.functions, inc_depth(ctx)),
+      traverse_maybe_node(node.alias, inc_depth(ctx))
+    ]
+  end
+
   defp traverse_node(%PgQuery.SubLink{} = node, ctx) do
     [
-      traverse_maybe_node(node.subselect, inc_depth(ctx)),
-      {node, ctx}
+      {node, ctx},
+      traverse_maybe_node(node.testexpr, inc_depth(ctx)),
+      traverse_maybe_node(node.subselect, inc_depth(ctx))
     ]
   end
 
   defp traverse_node(%PgQuery.JoinExpr{} = node, ctx) do
     [
+      {node, ctx},
       traverse_maybe_node(node.larg, inc_depth(ctx)),
       traverse_maybe_node(node.rarg, inc_depth(ctx)),
-      traverse_maybe_node(node.quals, inc_depth(ctx)),
-      {node, ctx}
+      traverse_maybe_node(node.quals, inc_depth(ctx))
     ]
+  end
+
+  defp traverse_node(%PgQuery.List{} = node, ctx) do
+    traverse_nodes(node.items, ctx)
   end
 
   defp traverse_node(%PgQuery.SortBy{} = node, ctx) do
     [
-      traverse_maybe_node(node.node, inc_depth(ctx)),
-      {node, ctx}
+      {node, ctx},
+      traverse_maybe_node(node.node, inc_depth(ctx))
     ]
   end
 
   defp traverse_node(%PgQuery.NullTest{} = node, ctx) do
     [
-      traverse_maybe_node(node.arg, inc_depth(ctx)),
-      {node, ctx}
+      {node, ctx},
+      traverse_maybe_node(node.arg, inc_depth(ctx))
     ]
+  end
+
+  defp traverse_node(%PgQuery.CaseExpr{} = node, ctx) do
+    [
+      {node, ctx},
+      traverse_nodes(node.args, inc_depth(ctx)),
+      traverse_maybe_node(node.defresult, inc_depth(ctx))
+    ]
+  end
+
+  defp traverse_node(%PgQuery.CaseWhen{} = node, ctx) do
+    [
+      {node, ctx},
+      traverse_maybe_node(node.expr, inc_depth(ctx)),
+      traverse_maybe_node(node.result, inc_depth(ctx))
+    ]
+  end
+
+  defp traverse_node(%PgQuery.BoolExpr{} = node, ctx) do
+    [
+      {node, ctx},
+      traverse_nodes(node.args, inc_depth(ctx))
+    ]
+  end
+
+  defp traverse_node(%PgQuery.TypeCast{} = node, ctx) do
+    [
+      {node, ctx},
+      traverse_maybe_node(node.arg, inc_depth(ctx))
+    ]
+  end
+
+  defp traverse_node(%PgQuery.A_ArrayExpr{} = node, ctx) do
+    [{node, ctx}]
   end
 
   defp traverse_maybe_node(nil, _ctx), do: []
