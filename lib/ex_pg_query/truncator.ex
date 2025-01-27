@@ -6,7 +6,6 @@ defmodule ExPgQuery.Truncator do
 
   alias ExPgQuery.ProtoWalker
   alias ExPgQuery.ProtoUtils
-  alias ExPgQuery.Parser
 
   defmodule PossibleTruncation do
     @moduledoc "Represents a location in the query that could be truncated"

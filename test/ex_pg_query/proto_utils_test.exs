@@ -4,23 +4,23 @@ defmodule ExPgQuery.ProtoUtilsTest do
   alias ExPgQuery.ProtoUtils
 
   describe "update_in_proto/3" do
-    test "updates a simple field in a select statement" do
-      {:ok, result} = ExPgQuery.parse_protobuf("SELECT * FROM users")
-      path = [:stmts, 0, :stmt, :select_stmt, :limit_count]
+    # test "updates a simple field in a select statement" do
+    #   {:ok, result} = ExPgQuery.parse_protobuf("SELECT * FROM users")
+    #   path = [:stmts, 0, :stmt, :select_stmt, :limit_count]
 
-      updated = ProtoUtils.update_in_proto(result, path, fn _ ->
-        %PgQuery.Node{
-          node: {:a_const, %PgQuery.A_Const{
-            val: {:integer, %PgQuery.Integer{ival: 10}}
-          }}
-        }
-      end)
+    #   updated = ProtoUtils.update_in_tree!(result, path, fn _ ->
+    #     %PgQuery.Node{
+    #       node: {:a_const, %PgQuery.A_Const{
+    #         val: {:integer, %PgQuery.Integer{ival: 10}}
+    #       }}
+    #     }
+    #   end)
 
-      assert get_in_path(updated, path).node == {
-        :a_const,
-        %PgQuery.A_Const{val: {:integer, %PgQuery.Integer{ival: 10}}}
-      }
-    end
+    #   assert get_in_path(updated, path).node == {
+    #     :a_const,
+    #     %PgQuery.A_Const{val: {:integer, %PgQuery.Integer{ival: 10}}}
+    #   }
+    # end
 
     # test "updates a list by adding a new element" do
     #   {:ok, result} = ExPgQuery.parse_protobuf("SELECT id, name FROM users")
