@@ -14,229 +14,49 @@ defmodule ExPgQuery.NodeTraversal do
               is_recursive_cte: false
   end
 
-  def nodes(%PgQuery.ParseResult{stmts: stmts}) do
-    Enum.flat_map(stmts, fn
-      %{stmt: %{node: {_type, node}}} ->
-        traverse_node(node, %Ctx{})
-        |> List.flatten()
+  def nodes(%PgQuery.ParseResult{} = tree) do
+    traverse_node(tree, ctx_for_node(nil, tree, %Ctx{}))
+    |> List.flatten()
+  end
 
-      _ ->
-        []
+  defp traverse_node(nil, _ctx), do: []
+
+  defp traverse_node(node_list, ctx) when is_list(node_list) do
+    Enum.map(node_list, &traverse_node(&1, ctx))
+  end
+
+  defp traverse_node(node, ctx) when is_struct(node) do
+    children =
+      msg_to_field_nodes(node)
+      |> Enum.map(&traverse_node(&1.value, ctx_for_node(node, &1, ctx)))
+
+    [{node, ctx} | children]
+  end
+
+  defp ctx_for_node(%PgQuery.SelectStmt{}, %{key: :where_clause}, ctx), do: %Ctx{ctx | type: :select, has_filter: true}
+  defp ctx_for_node(%PgQuery.SelectStmt{}, _node, ctx), do: %Ctx{ctx | type: :select}
+  defp ctx_for_node(%PgQuery.WithClause{recursive: recursive}, _node, ctx), do: %Ctx{ctx | is_recursive_cte: recursive}
+  defp ctx_for_node(%PgQuery.CommonTableExpr{ctename: ctename}, _node, ctx), do: %Ctx{ctx | current_cte: ctename}
+  defp ctx_for_node(_parent, _node, ctx), do: ctx
+
+  defp msg_to_field_nodes(msg) do
+    apply(msg.__struct__, :fields_defs, [])
+    |> Enum.filter(fn
+      %Protox.Field{type: {:message, _}} -> true
+      _ -> false
     end)
-  end
-
-  defp traverse_node(%PgQuery.Node{node: nil}, _ctx) do
-    []
-  end
-
-  defp traverse_node(%PgQuery.Node{node: {_type, node}}, ctx) do
-    traverse_node(node, ctx)
-  end
-
-  defp traverse_node(%PgQuery.SelectStmt{} = node, ctx) do
-    updated_ctx = %Ctx{inc_depth(ctx) | type: :select}
-
-    [
-      {node, ctx},
-      # the order here is important, because the CTEs are defined before
-      # the main query, so we need to traverse them first in order to
-      # have the correct list of cte names when traversing the main query
-      traverse_maybe_node(node.with_clause, updated_ctx),
-      traverse_nodes(node.target_list, updated_ctx),
-      traverse_maybe_node(node.where_clause, %Ctx{updated_ctx | has_filter: true}),
-      traverse_nodes(node.sort_clause, updated_ctx),
-      traverse_nodes(node.group_clause, updated_ctx),
-      traverse_maybe_node(node.having_clause, updated_ctx),
-      traverse_nodes(node.distinct_clause, updated_ctx),
-      traverse_maybe_node(node.into_clause, updated_ctx),
-      traverse_nodes(node.window_clause, updated_ctx),
-      traverse_nodes(node.values_lists, updated_ctx),
-      traverse_maybe_node(node.limit_offset, updated_ctx),
-      traverse_maybe_node(node.limit_count, updated_ctx),
-      traverse_nodes(node.locking_clause, updated_ctx),
-      case node.op do
-        :SETOP_NONE ->
-          traverse_nodes(node.from_clause, updated_ctx)
-
-        op when op in ~w(SETOP_UNION SETOP_INTERSECT SETOP_EXCEPT)a ->
-          [
-            traverse_maybe_node(node.larg, updated_ctx),
-            traverse_maybe_node(node.rarg, updated_ctx)
-          ]
+    |> Enum.map(fn field_def ->
+      case field_def do
+        # traverse oneof fields in %PgQuery.Node{}
+        %Protox.Field{kind: {:oneof, oneof_field}, name: name} ->
+          case Map.get(msg, oneof_field) do
+            {^name, value} -> %{key: field_def.name, value: value}
+            _ -> %{key: field_def.name, value: nil}
+          end
 
         _ ->
-          []
+          %{key: field_def.name, value: Map.get(msg, field_def.name)}
       end
-    ]
-  end
-
-  defp traverse_node(%PgQuery.ResTarget{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.val, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.WindowDef{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_nodes(node.partition_clause, inc_depth(ctx)),
-      traverse_nodes(node.order_clause, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.FuncCall{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_nodes(node.args, inc_depth(ctx)),
-      traverse_nodes(node.agg_order, inc_depth(ctx)),
-      # %Ctx{inc_depth(ctx) | has_filter: true}),
-      traverse_maybe_node(node.agg_filter, inc_depth(ctx)),
-      traverse_maybe_node(node.over, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.ColumnRef{} = node, ctx) do
-    [{node, ctx}]
-  end
-
-  defp traverse_node(%PgQuery.WithClause{} = node, ctx) do
-    traverse_nodes(node.ctes, %Ctx{ctx | is_recursive_cte: node.recursive})
-  end
-
-  defp traverse_node(%PgQuery.CommonTableExpr{} = node, ctx) do
-    cte_ctx = %Ctx{inc_depth(ctx) | current_cte: node.ctename}
-
-    [
-      {node, ctx},
-      traverse_node(node.ctequery, cte_ctx)
-    ]
-  end
-
-  defp traverse_node(%PgQuery.RangeVar{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.alias, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.A_Expr{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.lexpr, inc_depth(ctx)),
-      traverse_maybe_node(node.rexpr, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.A_Const{} = node, ctx) do
-    [{node, ctx}]
-  end
-
-  defp traverse_node(%PgQuery.RangeSubselect{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.subquery, inc_depth(ctx)),
-      traverse_maybe_node(node.alias, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.Alias{} = node, ctx) do
-    [{node, ctx}]
-  end
-
-  defp traverse_node(%PgQuery.ParamRef{} = node, ctx) do
-    [{node, ctx}]
-  end
-
-  defp traverse_node(%PgQuery.RangeFunction{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_nodes(node.functions, inc_depth(ctx)),
-      traverse_maybe_node(node.alias, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.SubLink{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.testexpr, inc_depth(ctx)),
-      traverse_maybe_node(node.subselect, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.JoinExpr{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.larg, inc_depth(ctx)),
-      traverse_maybe_node(node.rarg, inc_depth(ctx)),
-      traverse_maybe_node(node.quals, inc_depth(ctx)),
-      traverse_maybe_node(node.alias, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.List{} = node, ctx) do
-    traverse_nodes(node.items, ctx)
-  end
-
-  defp traverse_node(%PgQuery.SortBy{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.node, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.NullTest{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.arg, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.CaseExpr{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_nodes(node.args, inc_depth(ctx)),
-      traverse_maybe_node(node.defresult, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.CaseWhen{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.expr, inc_depth(ctx)),
-      traverse_maybe_node(node.result, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.BoolExpr{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_nodes(node.args, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.TypeCast{} = node, ctx) do
-    [
-      {node, ctx},
-      traverse_maybe_node(node.arg, inc_depth(ctx))
-    ]
-  end
-
-  defp traverse_node(%PgQuery.A_ArrayExpr{} = node, ctx) do
-    [{node, ctx}]
-  end
-
-  defp traverse_maybe_node(nil, _ctx), do: []
-
-  defp traverse_maybe_node(node, ctx) do
-    traverse_node(node, ctx)
-  end
-
-  defp traverse_nodes(nodes, ctx) when is_list(nodes) do
-    Enum.flat_map(nodes, &traverse_maybe_node(&1, ctx))
-  end
-
-  defp inc_depth(%Ctx{depth: depth} = ctx) do
-    %Ctx{ctx | depth: depth + 1}
+    end)
   end
 end

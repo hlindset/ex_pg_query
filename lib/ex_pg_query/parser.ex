@@ -22,8 +22,21 @@ defmodule ExPgQuery.Parser do
       nodes = NodeTraversal.nodes(protobuf)
       initial_result = %Result{protobuf: protobuf}
 
+      # find all CTEs first, so we can compare table names to CTE names
+      # without having to worry about the order in which they appear
+      # in the nodes list
+      cte_results = Enum.reduce(nodes, initial_result, fn node, acc ->
+        case node do
+          {%PgQuery.CommonTableExpr{} = node, _} ->
+            %Result{acc | cte_names: [node.ctename | acc.cte_names]}
+
+          _ ->
+            acc
+        end
+      end)
+
       result =
-        Enum.reduce(nodes, initial_result, fn node, acc ->
+        Enum.reduce(nodes, cte_results, fn node, acc ->
           case node do
             {%PgQuery.RangeVar{} = node, %Ctx{} = ctx} ->
               table =
@@ -65,9 +78,6 @@ defmodule ExPgQuery.Parser do
                 |> Enum.join(".")
 
               %Result{acc | functions: [function | acc.functions]}
-
-            {%PgQuery.CommonTableExpr{} = node, _} ->
-              %Result{acc | cte_names: [node.ctename | acc.cte_names]}
 
             {%PgQuery.ColumnRef{} = node, %Ctx{has_filter: true}} ->
               field =
