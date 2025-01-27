@@ -15,6 +15,31 @@ defmodule ExPgQuery.Truncator do
 
   @ellipsis "..."
   @ellipsis_length String.length(@ellipsis)
+  @dummy_column_ref %PgQuery.Node{
+    node:
+      {:column_ref,
+       %PgQuery.ColumnRef{
+         fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: @ellipsis}}}]
+       }}
+  }
+  @dummy_ctequery_node %PgQuery.Node{
+    node:
+      {:select_stmt,
+       %PgQuery.SelectStmt{
+         where_clause: @dummy_column_ref,
+         op: :SETOP_NONE
+       }}
+  }
+  @dummy_cols_list [
+    %PgQuery.Node{
+      node: {:res_target, %PgQuery.ResTarget{name: @ellipsis}}
+    }
+  ]
+  @dummy_values_list [
+    %PgQuery.Node{
+      node: {:list, %PgQuery.List{items: [@dummy_column_ref]}}
+    }
+  ]
 
   defp query_length(protobuf) do
     with {:ok, encoded} <- Protox.encode(protobuf),
@@ -47,14 +72,6 @@ defmodule ExPgQuery.Truncator do
           # Sort by deepest and longest first
           |> Enum.sort_by(&{length(&1.location) * -1, &1.length * -1})
 
-        dummy_column_ref = %PgQuery.Node{
-          node:
-            {:column_ref,
-             %PgQuery.ColumnRef{
-               fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: @ellipsis}}}]
-             }}
-        }
-
         truncated_tree =
           Enum.reduce_while(truncations, tree, fn truncation, tree_acc ->
             updated_tree =
@@ -76,7 +93,7 @@ defmodule ExPgQuery.Truncator do
                             %PgQuery.Node{
                               node:
                                 {:res_target,
-                                 %PgQuery.ResTarget{name: res_target_name, val: dummy_column_ref}}
+                                 %PgQuery.ResTarget{name: res_target_name, val: @dummy_column_ref}}
                             }
                           ]
                       }
@@ -87,61 +104,28 @@ defmodule ExPgQuery.Truncator do
                   ProtoUtils.update_in_tree!(
                     tree_acc,
                     remove_last_element(truncation.location),
-                    fn parent_node ->
-                      %{parent_node | where_clause: dummy_column_ref}
-                    end
+                    &%{&1 | where_clause: @dummy_column_ref}
                   )
 
                 %PossibleTruncation{node_type: :values_lists} ->
                   ProtoUtils.update_in_tree!(
                     tree_acc,
                     remove_last_element(truncation.location),
-                    fn parent_node ->
-                      %{
-                        parent_node
-                        | values_lists: [
-                            %PgQuery.Node{
-                              node: {:list, %PgQuery.List{items: [dummy_column_ref]}}
-                            }
-                          ]
-                      }
-                    end
+                    &%{&1 | values_lists: @dummy_values_list}
                   )
 
                 %PossibleTruncation{node_type: :ctequery} ->
                   ProtoUtils.update_in_tree!(
                     tree_acc,
                     remove_last_element(truncation.location),
-                    fn parent_node ->
-                      %{
-                        parent_node
-                        | ctequery: %PgQuery.Node{
-                            node:
-                              {:select_stmt,
-                               %PgQuery.SelectStmt{
-                                 where_clause: dummy_column_ref,
-                                 op: :SETOP_NONE
-                               }}
-                          }
-                      }
-                    end
+                    &%{&1 | ctequery: @dummy_ctequery_node}
                   )
 
                 %PossibleTruncation{node_type: :cols} ->
                   ProtoUtils.update_in_tree!(
                     tree_acc,
                     remove_last_element(truncation.location),
-                    fn
-                      parent_node ->
-                        %{
-                          parent_node
-                          | cols: [
-                              %PgQuery.Node{
-                                node: {:res_target, %PgQuery.ResTarget{name: @ellipsis}}
-                              }
-                            ]
-                        }
-                    end
+                    &%{&1 | cols: @dummy_cols_list}
                   )
 
                 other ->
@@ -188,14 +172,15 @@ defmodule ExPgQuery.Truncator do
     %PgQuery.SelectStmt{target_list: node, op: :SETOP_NONE}
     |> ExPgQuery.deparse_stmt!()
     |> String.replace_leading("SELECT", "")
-    |> String.replace_leading(" ", "")
+    |> String.trim_leading()
     |> String.length()
   end
 
   defp update_target_list_length(node) do
     %PgQuery.UpdateStmt{target_list: node, relation: %PgQuery.RangeVar{relname: "x", inh: true}}
     |> ExPgQuery.deparse_stmt!()
-    |> String.replace_leading("UPDATE x SET ", "")
+    |> String.replace_leading("UPDATE x SET", "")
+    |> String.trim_leading()
     |> String.length()
   end
 
