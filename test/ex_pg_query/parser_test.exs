@@ -677,12 +677,14 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["comments", "post_stats", "posts", "users"])
+
       assert result.table_aliases == %{
-        "c" => %{name: "comments", type: :select},
-        "p" => %{name: "posts", type: :select},
-        "ps" => %{name: "post_stats", type: :select},
-        "u" => %{name: "users", type: :select}
-      }
+               "c" => %{name: "comments", type: :select},
+               "p" => %{name: "posts", type: :select},
+               "ps" => %{name: "post_stats", type: :select},
+               "u" => %{name: "users", type: :select}
+             }
+
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -696,11 +698,13 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["analytics.posts", "public.users", "stats.user_metrics"])
+
       assert result.table_aliases == %{
-        "p" => %{name: "analytics.posts", type: :select},
-        "u" => %{name: "public.users", type: :select},
-        "um" => %{name: "stats.user_metrics", type: :select}
-      }
+               "p" => %{name: "analytics.posts", type: :select},
+               "u" => %{name: "public.users", type: :select},
+               "um" => %{name: "stats.user_metrics", type: :select}
+             }
+
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -717,9 +721,11 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["users"])
+
       assert result.table_aliases == %{
-        "u" => %{name: "users", type: :select},
-      }
+               "u" => %{name: "users", type: :select}
+             }
+
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -802,10 +808,10 @@ defmodule ExPgQuery.ParserTest do
       assert_select_tables(result, ["payments", "posts", "users"])
 
       assert result.table_aliases == %{
-        "p" => %{name: "posts", type: :select},
-        "pay" => %{name: "payments", type: :select},
-        "u" => %{name: "users", type: :select}
-      }
+               "p" => %{name: "posts", type: :select},
+               "pay" => %{name: "payments", type: :select},
+               "u" => %{name: "users", type: :select}
+             }
 
       assert result.cte_names == ["cte"]
       assert_statement_types(result, [:select_stmt])
