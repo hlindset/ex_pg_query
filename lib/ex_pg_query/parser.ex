@@ -75,17 +75,6 @@ defmodule ExPgQuery.Parser do
             # subselect items
             #
 
-            {%PgQuery.FuncCall{} = node, %Ctx{} = ctx}
-            when ctx.subselect_item or ctx.from_clause_item ->
-              function =
-                node.funcname
-                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
-                  sval
-                end)
-                |> Enum.join(".")
-
-              %Result{acc | functions: [%{name: function, type: :call} | acc.functions]}
-
             {%PgQuery.ColumnRef{} = node, %Ctx{subselect_item: true}} ->
               field =
                 node.fields
@@ -106,6 +95,21 @@ defmodule ExPgQuery.Parser do
               else
                 acc
               end
+
+            #
+            # both from_clause_item and subselect_item
+            #
+
+            {%PgQuery.FuncCall{} = node, %Ctx{} = ctx}
+            when ctx.subselect_item or ctx.from_clause_item ->
+              function =
+                node.funcname
+                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                  sval
+                end)
+                |> Enum.join(".")
+
+              %Result{acc | functions: [%{name: function, type: :call} | acc.functions]}
 
             _ ->
               acc
