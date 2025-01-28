@@ -945,89 +945,111 @@ defmodule ExPgQuery.ParserTest do
       {:ok, result} =
         Parser.parse(~s|SELECT * INTO films_recent FROM films WHERE date_prod >= "2002-01-01"|)
 
-      assert Parser.ddl_tables(result) == ["films_recent"]
-      assert Parser.select_tables(result) == ["films"]
+      assert_ddl_tables(result, ["films_recent"])
+      assert_select_tables(result, ["films"])
     end
 
-      test "parses CREATE TABLE statements" do
-        {:ok, result} =
-          Parser.parse("""
-          CREATE TABLE users (
-            id SERIAL PRIMARY KEY,
-            name VARCHAR(255) NOT NULL,
-            email VARCHAR(255) UNIQUE,
-            status user_status DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT NOW(),
-            CONSTRAINT valid_status CHECK (status IN ('pending', 'active', 'inactive')),
-            CONSTRAINT unique_email UNIQUE (email)
-          )
-          """)
+    test "parses CREATE TABLE statements" do
+      {:ok, result} =
+        Parser.parse("""
+        CREATE TABLE users (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          email VARCHAR(255) UNIQUE,
+          status user_status DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT NOW(),
+          CONSTRAINT valid_status CHECK (status IN ('pending', 'active', 'inactive')),
+          CONSTRAINT unique_email UNIQUE (email)
+        )
+        """)
 
-        assert_ddl_tables(result, ["users"])
-        assert result.cte_names == []
-        assert_statement_types(result, [:create_stmt])
-      end
+      assert_ddl_tables(result, ["users"])
+      assert result.cte_names == []
+      assert_statement_types(result, [:create_stmt])
+    end
 
-    #   test "parses ALTER TABLE statements" do
-    #     {:ok, result} =
-    #       Parser.parse("""
-    #       ALTER TABLE users
-    #         ADD COLUMN last_login TIMESTAMP,
-    #         ADD COLUMN login_count INTEGER DEFAULT 0,
-    #         DROP COLUMN temporary_token,
-    #         ADD CONSTRAINT positive_login_count CHECK (login_count >= 0),
-    #         ALTER COLUMN status SET DEFAULT 'pending',
-    #         DROP CONSTRAINT IF EXISTS old_constraint
-    #       """)
+    test "parses ALTER TABLE statements" do
+      {:ok, result} =
+        Parser.parse("""
+        ALTER TABLE users
+          ADD COLUMN last_login TIMESTAMP,
+          ADD COLUMN login_count INTEGER DEFAULT 0,
+          DROP COLUMN temporary_token,
+          ADD CONSTRAINT positive_login_count CHECK (login_count >= 0),
+          ALTER COLUMN status SET DEFAULT 'pending',
+          DROP CONSTRAINT IF EXISTS old_constraint
+        """)
 
-    #     assert_select_tables(result, ["users"])
-    #     assert result.cte_names == []
-    #     assert_statement_types(result, [:alter_table_stmt])
-    #   end
+      assert_ddl_tables(result, ["users"])
+      assert result.cte_names == []
+      assert_statement_types(result, [:alter_table_stmt])
+    end
 
-    #   test "parses CREATE INDEX statements" do
-    #     {:ok, result} =
-    #       Parser.parse("""
-    #       CREATE UNIQUE INDEX CONCURRENTLY users_email_idx
-    #       ON users (LOWER(email))
-    #       WHERE deleted_at IS NULL
-    #       """)
+    test "parses CREATE INDEX" do
+      {:ok, result} =
+        Parser.parse("""
+        CREATE INDEX testidx
+        ON test
+        USING btree (a, (lower(b) || upper(c)))
+        WHERE pow(a, 2) > 25
+        """)
 
-    #     assert_select_tables(result, ["users"])
-    #     assert result.cte_names == []
-    #     assert_statement_types(result, [:index_stmt])
-    #   end
+      assert_tables(result, ["test"])
+      assert_ddl_tables(result, ["test"])
+      assert_call_functions(result, ["lower", "upper", "pow"])
+      assert_filter_columns(result, [[nil, "a"]])
+    end
 
-    #   test "parses CREATE VIEW statements" do
-    #     {:ok, result} =
-    #       Parser.parse("""
-    #       CREATE OR REPLACE VIEW active_users AS
-    #       SELECT u.*, COUNT(s.id) as session_count
-    #       FROM users u
-    #       LEFT JOIN sessions s ON s.user_id = u.id
-    #       WHERE u.status = 'active'
-    #       GROUP BY u.id
-    #       """)
+    test "parses CREATE INDEX statements" do
+      {:ok, result} =
+        Parser.parse("""
+        CREATE UNIQUE INDEX CONCURRENTLY users_email_idx
+        ON users (LOWER(email))
+        WHERE deleted_at IS NULL
+        """)
 
-    #     assert_select_tables(result, ["sessions", "users"])
-    #     assert result.cte_names == []
-    #     assert result.table_aliases == ["s", "u"]
-    #     assert_statement_types(result, [:view_stmt])
-    #   end
+      assert_ddl_tables(result, ["users"])
+      assert result.cte_names == []
+      assert_statement_types(result, [:index_stmt])
+    end
 
-    #   test "parses DROP statements" do
-    #     {:ok, result} =
-    #       Parser.parse("""
-    #       DROP TABLE IF EXISTS temporary_users CASCADE;
-    #       DROP INDEX IF EXISTS users_email_idx;
-    #       DROP VIEW IF EXISTS active_users;
-    #       DROP SEQUENCE IF EXISTS user_id_seq;
-    #       """)
+    test "parses CREATE VIEW statements" do
+      {:ok, result} =
+        Parser.parse("""
+        CREATE OR REPLACE VIEW active_users AS
+        SELECT u.*, COUNT(s.id) as session_count
+        FROM users u
+        LEFT JOIN sessions s ON s.user_id = u.id
+        WHERE u.status = 'active'
+        GROUP BY u.id
+        """)
 
-    #     assert_select_tables(result, ["temporary_users"])
-    #     assert result.cte_names == []
-    #     assert_statement_types(result, [:drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt])
-    #   end
+      assert_select_tables(result, ["sessions", "users"])
+      assert_ddl_tables(result, ["active_users"])
+      assert result.cte_names == []
+
+      assert result.table_aliases == %{
+               "s" => %{name: "sessions", type: :select},
+               "u" => %{name: "users", type: :select}
+             }
+
+      assert_statement_types(result, [:view_stmt])
+    end
+
+    test "parses DROP statements" do
+      {:ok, result} =
+        Parser.parse("""
+        DROP TABLE IF EXISTS temporary_users CASCADE;
+        DROP TABLE IF EXISTS public.temporary_ids;
+        DROP INDEX IF EXISTS users_email_idx;
+        DROP VIEW IF EXISTS active_users;
+        DROP SEQUENCE IF EXISTS user_id_seq;
+        """)
+
+      assert_ddl_tables(result, ["temporary_users", "public.temporary_ids", "active_users"])
+      assert result.cte_names == []
+      assert_statement_types(result, [:drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt])
+    end
 
     #   test "parses CREATE SEQUENCE statements" do
     #     {:ok, result} =
@@ -1097,5 +1119,13 @@ defmodule ExPgQuery.ParserTest do
 
   defp assert_ddl_functions(result, expected) do
     assert Enum.sort(Parser.ddl_functions(result)) == Enum.sort(expected)
+  end
+
+  defp assert_filter_columns(result, expected) do
+    assert Enum.sort(result.filter_columns) == Enum.sort(expected)
+  end
+
+  defp assert_cte_names(result, expected) do
+    assert Enum.sort(result.cte_names) == Enum.sort(expected)
   end
 end

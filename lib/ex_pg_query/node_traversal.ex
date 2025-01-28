@@ -30,7 +30,9 @@ defmodule ExPgQuery.NodeTraversal do
               current_cte: nil,
               is_recursive_cte: false,
               subselect_item: false,
-              from_clause_item: false
+              from_clause_item: false,
+              join_clause_condition: false,
+              where_condition: false
   end
 
   @doc """
@@ -102,6 +104,7 @@ defmodule ExPgQuery.NodeTraversal do
               is_struct(node, PgQuery.CreateFunctionStmt) or
               is_struct(node, PgQuery.RenameStmt) or
               is_struct(node, PgQuery.RuleStmt) or
+              is_struct(node, PgQuery.IndexStmt) or
               is_struct(node, PgQuery.ViewStmt),
        do: %Ctx{ctx | type: :ddl}
 
@@ -125,6 +128,9 @@ defmodule ExPgQuery.NodeTraversal do
   defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx)
        when field in [:into_clause],
        do: %Ctx{ctx | from_clause_item: true, type: :ddl}
+
+  defp ctx_for_field(%PgQuery.JoinExpr{}, field, ctx) when field in [:quals],
+    do: %Ctx{ctx | join_clause_condition: true}
 
   defp ctx_for_field(_node, _field, ctx),
     do: ctx
