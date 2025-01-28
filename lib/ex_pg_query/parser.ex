@@ -113,8 +113,6 @@ defmodule ExPgQuery.Parser do
            table_aliases: Enum.uniq(result.table_aliases),
            filter_columns: Enum.uniq(result.filter_columns)
        }}
-    else
-      {:error, reason} -> {:error, reason}
     end
   end
 
