@@ -65,12 +65,8 @@ defmodule ExPgQuery.Parser do
                 acc
               end
 
-            #
-            # from clause items
-            #
-
-            {%PgQuery.RangeVar{} = node, %Ctx{type: type, from_clause_item: true} = ctx} ->
-              table =
+            {%PgQuery.RangeVar{} = node, %Ctx{type: type} = ctx} ->
+              table_name =
                 case node do
                   %PgQuery.RangeVar{schemaname: "", relname: relname} ->
                     relname
@@ -79,7 +75,7 @@ defmodule ExPgQuery.Parser do
                     "#{schemaname}.#{relname}"
                 end
 
-              is_cte_name = Enum.member?(acc.cte_names, table) || ctx.current_cte == table
+              is_cte_name = Enum.member?(acc.cte_names, table_name) || ctx.current_cte == table_name
 
               cond do
                 # we're outside a cte, so it's a cte reference
@@ -87,13 +83,21 @@ defmodule ExPgQuery.Parser do
                   acc
 
                 # we're inside a recursive cte, so it's a cte's reference to itself
-                is_cte_name && ctx.current_cte == table && ctx.is_recursive_cte ->
+                is_cte_name && ctx.current_cte == table_name && ctx.is_recursive_cte ->
                   acc
 
                 # otherwise, it's a cte's reference to a table with the same name
                 # or just a table reference
                 true ->
-                  table = %{name: table, type: type}
+                  table = %{
+                    name: table_name,
+                    type: type,
+                    location: node.location,
+                    schemaname: node.schemaname,
+                    relname: node.relname,
+                    inh: node.inh,
+                    relpersistence: node.relpersistence
+                  }
                   result = %Result{acc | tables: [table | acc.tables]}
 
                   # if there's an alias, store it
@@ -101,7 +105,7 @@ defmodule ExPgQuery.Parser do
                     %PgQuery.Alias{aliasname: aliasname} ->
                       %Result{
                         result
-                        | table_aliases: Map.merge(result.table_aliases, %{aliasname => table})
+                        | table_aliases: Map.merge(result.table_aliases, %{aliasname => %{name: table_name, type: type}})
                       }
 
                     nil ->
@@ -110,11 +114,14 @@ defmodule ExPgQuery.Parser do
               end
 
             #
+            # from clause items
+            #
+
+            #
             # both from clause items and subselect items
             #
 
-            {%PgQuery.FuncCall{} = node, %Ctx{} = ctx}
-            when ctx.subselect_item or ctx.from_clause_item ->
+            {%PgQuery.FuncCall{} = node, %Ctx{} = ctx} when ctx.subselect_item or ctx.from_clause_item ->
               function =
                 node.funcname
                 |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
@@ -142,40 +149,45 @@ defmodule ExPgQuery.Parser do
   end
 
   def tables(%Result{tables: tables}),
-    do: Enum.map(tables, & &1.name)
+    do: Enum.map(tables, & &1.name) |> Enum.uniq()
 
   def select_tables(%Result{tables: tables}),
     do:
       tables
       |> Enum.filter(&(&1.type == :select))
       |> Enum.map(& &1.name)
+      |> Enum.uniq()
 
   def ddl_tables(%Result{tables: tables}),
     do:
       tables
       |> Enum.filter(&(&1.type == :ddl))
       |> Enum.map(& &1.name)
+      |> Enum.uniq()
 
   def dml_tables(%Result{tables: tables}),
     do:
       tables
       |> Enum.filter(&(&1.type == :dml))
       |> Enum.map(& &1.name)
+      |> Enum.uniq()
 
   def functions(%Result{functions: functions}),
-    do: Enum.map(functions, & &1.name)
+    do: Enum.map(functions, & &1.name) |> Enum.uniq()
 
   def call_functions(%Result{functions: functions}),
     do:
       functions
       |> Enum.filter(&(&1.type == :call))
       |> Enum.map(& &1.name)
+      |> Enum.uniq()
 
   def ddl_functions(%Result{functions: functions}),
     do:
       functions
       |> Enum.filter(&(&1.type == :ddl))
       |> Enum.map(& &1.name)
+      |> Enum.uniq()
 
   def statement_types(%Result{protobuf: %PgQuery.ParseResult{stmts: stmts}}) do
     Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {stmt_type, _}}} ->

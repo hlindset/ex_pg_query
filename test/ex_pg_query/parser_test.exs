@@ -949,24 +949,24 @@ defmodule ExPgQuery.ParserTest do
       assert Parser.select_tables(result) == ["films"]
     end
 
-    #   test "parses CREATE TABLE statements" do
-    #     {:ok, result} =
-    #       Parser.parse("""
-    #       CREATE TABLE users (
-    #         id SERIAL PRIMARY KEY,
-    #         name VARCHAR(255) NOT NULL,
-    #         email VARCHAR(255) UNIQUE,
-    #         status user_status DEFAULT 'pending',
-    #         created_at TIMESTAMP DEFAULT NOW(),
-    #         CONSTRAINT valid_status CHECK (status IN ('pending', 'active', 'inactive')),
-    #         CONSTRAINT unique_email UNIQUE (email)
-    #       )
-    #       """)
+      test "parses CREATE TABLE statements" do
+        {:ok, result} =
+          Parser.parse("""
+          CREATE TABLE users (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(255) NOT NULL,
+            email VARCHAR(255) UNIQUE,
+            status user_status DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT NOW(),
+            CONSTRAINT valid_status CHECK (status IN ('pending', 'active', 'inactive')),
+            CONSTRAINT unique_email UNIQUE (email)
+          )
+          """)
 
-    #     assert_select_tables(result, ["users"])
-    #     assert result.cte_names == []
-    #     assert_statement_types(result, [:create_stmt])
-    #   end
+        assert_ddl_tables(result, ["users"])
+        assert result.cte_names == []
+        assert_statement_types(result, [:create_stmt])
+      end
 
     #   test "parses ALTER TABLE statements" do
     #     {:ok, result} =

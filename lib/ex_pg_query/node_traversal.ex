@@ -88,6 +88,23 @@ defmodule ExPgQuery.NodeTraversal do
   defp ctx_for_node(%PgQuery.SelectStmt{}, ctx),
     do: %Ctx{ctx | type: :select}
 
+  defp ctx_for_node(node, ctx)
+       when is_struct(node, PgQuery.CreateStmt) or
+              is_struct(node, PgQuery.AlterTableStmt) or
+              is_struct(node, PgQuery.CreateTableAsStmt) or
+              is_struct(node, PgQuery.TruncateStmt) or
+              is_struct(node, PgQuery.CreateTrigStmt) or
+              is_struct(node, PgQuery.VacuumStmt) or
+              is_struct(node, PgQuery.RefreshMatViewStmt) or
+              is_struct(node, PgQuery.DropStmt) or
+              is_struct(node, PgQuery.GrantStmt) or
+              is_struct(node, PgQuery.LockStmt) or
+              is_struct(node, PgQuery.CreateFunctionStmt) or
+              is_struct(node, PgQuery.RenameStmt) or
+              is_struct(node, PgQuery.RuleStmt) or
+              is_struct(node, PgQuery.ViewStmt),
+       do: %Ctx{ctx | type: :ddl}
+
   defp ctx_for_node(%PgQuery.WithClause{recursive: recursive}, ctx),
     do: %Ctx{ctx | is_recursive_cte: recursive}
 
