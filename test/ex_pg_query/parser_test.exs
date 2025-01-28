@@ -585,7 +585,12 @@ defmodule ExPgQuery.ParserTest do
           FROM user_stats us
         """)
 
-      assert Enum.sort(result.table_aliases) == ["a", "c", "p", "u", "us"]
+      assert result.table_aliases == %{
+               "a" => %{name: "admins", type: :select},
+               "c" => %{name: "comments", type: :select},
+               "p" => %{name: "posts", type: :select},
+               "u" => %{name: "users", type: :select}
+             }
     end
 
     test "extracts filter columns from IN clause" do
@@ -618,7 +623,12 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["posts", "users"])
-      assert Enum.sort(result.table_aliases) == ["p", "u"]
+
+      assert result.table_aliases == %{
+               "p" => %{name: "posts", type: :select},
+               "u" => %{name: "users", type: :select}
+             }
+
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -632,7 +642,7 @@ defmodule ExPgQuery.ParserTest do
 
       # generate_series is a function, not a table
       assert assert_tables(result, [])
-      assert Enum.sort(result.table_aliases) == []
+      assert result.table_aliases == %{}
       assert_call_functions(result, ["generate_series"])
       assert_statement_types(result, [:select_stmt])
     end
@@ -651,7 +661,7 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert assert_tables(result, [])
-      assert Enum.sort(result.table_aliases) == []
+      assert result.table_aliases == %{}
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -667,7 +677,12 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["comments", "post_stats", "posts", "users"])
-      assert Enum.sort(result.table_aliases) == ["c", "p", "ps", "u"]
+      assert result.table_aliases == %{
+        "c" => %{name: "comments", type: :select},
+        "p" => %{name: "posts", type: :select},
+        "ps" => %{name: "post_stats", type: :select},
+        "u" => %{name: "users", type: :select}
+      }
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -681,7 +696,11 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["analytics.posts", "public.users", "stats.user_metrics"])
-      assert Enum.sort(result.table_aliases) == ["p", "u", "um"]
+      assert result.table_aliases == %{
+        "p" => %{name: "analytics.posts", type: :select},
+        "u" => %{name: "public.users", type: :select},
+        "um" => %{name: "stats.user_metrics", type: :select}
+      }
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -698,7 +717,9 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["users"])
-      assert result.table_aliases == ["u"]
+      assert result.table_aliases == %{
+        "u" => %{name: "users", type: :select},
+      }
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -716,7 +737,12 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["items", "users"])
-      assert Enum.sort(result.table_aliases) == ["MixedCase", "Users"]
+
+      assert result.table_aliases == %{
+               "MixedCase" => %{name: "items", type: :select},
+               "Users" => %{name: "users", type: :select}
+             }
+
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -733,7 +759,13 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       assert_select_tables(result, ["groups", "orders", "users"])
-      assert Enum.sort(result.table_aliases) == ["group", "order", "select"]
+
+      assert result.table_aliases == %{
+               "group" => %{name: "groups", type: :select},
+               "order" => %{name: "orders", type: :select},
+               "select" => %{name: "users", type: :select}
+             }
+
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -769,7 +801,11 @@ defmodule ExPgQuery.ParserTest do
 
       assert_select_tables(result, ["payments", "posts", "users"])
 
-      assert Enum.sort(result.table_aliases) == ["p", "pay", "u"]
+      assert result.table_aliases == %{
+        "p" => %{name: "posts", type: :select},
+        "pay" => %{name: "payments", type: :select},
+        "u" => %{name: "users", type: :select}
+      }
 
       assert result.cte_names == ["cte"]
       assert_statement_types(result, [:select_stmt])
@@ -857,7 +893,7 @@ defmodule ExPgQuery.ParserTest do
 
   #     assert_select_tables(result, ["user_sessions", "users"])
   #     assert result.cte_names == []
-  #     assert Enum.sort(result.table_aliases) == ["u", "us"]
+  #     assert result.table_aliases == ["u", "us"]
   #     assert_statement_types(result, [:update_stmt])
   #   end
 
@@ -893,7 +929,7 @@ defmodule ExPgQuery.ParserTest do
 
   #     assert_select_tables(result, ["customer_accounts", "payment_transactions"])
   #     assert result.cte_names == []
-  #     assert Enum.sort(result.table_aliases) == ["ca", "pt"]
+  #     assert result.table_aliases == ["ca", "pt"]
   #     assert_statement_types(result, [:merge_stmt])
   #   end
   # end
@@ -969,7 +1005,7 @@ defmodule ExPgQuery.ParserTest do
 
     #     assert_select_tables(result, ["sessions", "users"])
     #     assert result.cte_names == []
-    #     assert Enum.sort(result.table_aliases) == ["s", "u"]
+    #     assert result.table_aliases == ["s", "u"]
     #     assert_statement_types(result, [:view_stmt])
     #   end
 

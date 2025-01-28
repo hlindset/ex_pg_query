@@ -10,7 +10,7 @@ defmodule ExPgQuery.Parser do
   defmodule Result do
     defstruct protobuf: nil,
               tables: [],
-              table_aliases: [],
+              table_aliases: %{},
               cte_names: [],
               functions: [],
               filter_columns: []
@@ -40,37 +40,6 @@ defmodule ExPgQuery.Parser do
       result =
         Enum.reduce(nodes, cte_results, fn node, acc ->
           case node do
-            {%PgQuery.RangeVar{} = node, %Ctx{type: type} = ctx} ->
-              table =
-                case node do
-                  %PgQuery.RangeVar{schemaname: "", relname: relname} ->
-                    relname
-
-                  %PgQuery.RangeVar{schemaname: schemaname, relname: relname} ->
-                    "#{schemaname}.#{relname}"
-                end
-
-              is_cte_name = Enum.member?(acc.cte_names, table) || ctx.current_cte == table
-
-              result =
-                cond do
-                  # we're outside a cte, so it's a cte reference
-                  is_cte_name && ctx.current_cte == nil -> acc
-                  # we're inside a recursive cte, so it's a cte's reference to itself
-                  is_cte_name && ctx.current_cte == table && ctx.is_recursive_cte -> acc
-                  # otherwise, it's a cte's reference to a table with the same name
-                  # or just a table reference
-                  true -> %Result{acc | tables: [%{name: table, type: type} | acc.tables]}
-                end
-
-              case node.alias do
-                %PgQuery.Alias{aliasname: aliasname} ->
-                  %Result{result | table_aliases: [aliasname | result.table_aliases]}
-
-                nil ->
-                  result
-              end
-
             #
             # subselect items
             #
@@ -97,7 +66,51 @@ defmodule ExPgQuery.Parser do
               end
 
             #
-            # both from_clause_item and subselect_item
+            # from clause items
+            #
+
+            {%PgQuery.RangeVar{} = node, %Ctx{type: type, from_clause_item: true} = ctx} ->
+              table =
+                case node do
+                  %PgQuery.RangeVar{schemaname: "", relname: relname} ->
+                    relname
+
+                  %PgQuery.RangeVar{schemaname: schemaname, relname: relname} ->
+                    "#{schemaname}.#{relname}"
+                end
+
+              is_cte_name = Enum.member?(acc.cte_names, table) || ctx.current_cte == table
+
+              cond do
+                # we're outside a cte, so it's a cte reference
+                is_cte_name && ctx.current_cte == nil ->
+                  acc
+
+                # we're inside a recursive cte, so it's a cte's reference to itself
+                is_cte_name && ctx.current_cte == table && ctx.is_recursive_cte ->
+                  acc
+
+                # otherwise, it's a cte's reference to a table with the same name
+                # or just a table reference
+                true ->
+                  table = %{name: table, type: type}
+                  result = %Result{acc | tables: [table | acc.tables]}
+
+                  # if there's an alias, store it
+                  case node.alias do
+                    %PgQuery.Alias{aliasname: aliasname} ->
+                      %Result{
+                        result
+                        | table_aliases: Map.merge(result.table_aliases, %{aliasname => table})
+                      }
+
+                    nil ->
+                      result
+                  end
+              end
+
+            #
+            # both from clause items and subselect items
             #
 
             {%PgQuery.FuncCall{} = node, %Ctx{} = ctx}
@@ -122,7 +135,7 @@ defmodule ExPgQuery.Parser do
          | tables: Enum.uniq(result.tables),
            cte_names: Enum.uniq(result.cte_names),
            functions: Enum.uniq(result.functions),
-           table_aliases: Enum.uniq(result.table_aliases),
+           table_aliases: result.table_aliases,
            filter_columns: Enum.uniq(result.filter_columns)
        }}
     end
