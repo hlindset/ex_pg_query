@@ -4,36 +4,10 @@ defmodule ExPgQuery.ProtoWalker do
 
   Can traverse with either a simple node callback or with full location tracking.
   """
-
-  # def walk!(tree, callback) when is_function(callback, 1) do
-  #   do_walk([tree], callback)
-  # end
-
   def walk(tree, acc, callback) do
     {_, result} = do_walk([{tree, []}], acc, callback)
     result
   end
-
-  # # Simple node walking
-  # defp do_walk([], _callback), do: :ok
-
-  # defp do_walk([parent_node | rest], callback) do
-  #   nodes =
-  #     case parent_node do
-  #       %{__struct__: _} = msg ->
-  #         callback.(msg)
-  #         msg_to_nodes(msg)
-
-  #       nodes when is_list(nodes) ->
-  #         callback.(nodes)
-  #         nodes
-
-  #       _ ->
-  #         []
-  #     end
-
-  #   do_walk(nodes ++ rest, callback)
-  # end
 
   # # Walking with location tracking
   defp do_walk([] = nodes, acc, _callback), do: {nodes, acc}
