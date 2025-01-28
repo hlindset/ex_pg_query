@@ -106,12 +106,14 @@ defmodule ExPgQuery.ProtoUtilsTest do
 
   defp get_in_node(node, []), do: node
   defp get_in_node(%{node: {type, node}}, [type | rest]), do: get_in_node(node, rest)
+
   defp get_in_node(map, [key, :integer, :ival | rest]) when is_map(map) do
     case map do
       %{val: {:integer, %PgQuery.Integer{ival: val}}} -> get_in_node(val, rest)
       _ -> nil
     end
   end
+
   defp get_in_node(map, [key | rest]) when is_map(map), do: get_in_node(Map.get(map, key), rest)
   defp get_in_node(value, []), do: value
 end

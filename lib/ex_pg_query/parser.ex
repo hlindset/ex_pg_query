@@ -19,26 +19,28 @@ defmodule ExPgQuery.Parser do
   def parse(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
          {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
+      # |> dbg()
       nodes = NodeTraversal.nodes(protobuf)
       initial_result = %Result{protobuf: protobuf}
 
       # find all CTEs first, so we can compare table names to CTE names
       # without having to worry about the order in which they appear
       # in the nodes list
-      cte_results = Enum.reduce(nodes, initial_result, fn node, acc ->
-        case node do
-          {%PgQuery.CommonTableExpr{} = node, _} ->
-            %Result{acc | cte_names: [node.ctename | acc.cte_names]}
+      cte_results =
+        Enum.reduce(nodes, initial_result, fn node, acc ->
+          case node do
+            {%PgQuery.CommonTableExpr{} = node, _} ->
+              %Result{acc | cte_names: [node.ctename | acc.cte_names]}
 
-          _ ->
-            acc
-        end
-      end)
+            _ ->
+              acc
+          end
+        end)
 
       result =
         Enum.reduce(nodes, cte_results, fn node, acc ->
           case node do
-            {%PgQuery.RangeVar{} = node, %Ctx{} = ctx} ->
+            {%PgQuery.RangeVar{} = node, %Ctx{type: type} = ctx} ->
               table =
                 case node do
                   %PgQuery.RangeVar{schemaname: "", relname: relname} ->
@@ -58,7 +60,7 @@ defmodule ExPgQuery.Parser do
                   is_cte_name && ctx.current_cte == table && ctx.is_recursive_cte -> acc
                   # otherwise, it's a cte's reference to a table with the same name
                   # or just a table reference
-                  true -> %Result{acc | tables: [table | acc.tables]}
+                  true -> %Result{acc | tables: [%{name: table, type: type} | acc.tables]}
                 end
 
               case node.alias do
@@ -69,7 +71,12 @@ defmodule ExPgQuery.Parser do
                   result
               end
 
-            {%PgQuery.FuncCall{} = node, %Ctx{}} ->
+            #
+            # subselect items
+            #
+
+            {%PgQuery.FuncCall{} = node, %Ctx{} = ctx}
+            when ctx.subselect_item or ctx.from_clause_item ->
               function =
                 node.funcname
                 |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
@@ -77,11 +84,12 @@ defmodule ExPgQuery.Parser do
                 end)
                 |> Enum.join(".")
 
-              %Result{acc | functions: [function | acc.functions]}
+              %Result{acc | functions: [%{name: function, type: :call} | acc.functions]}
 
-            {%PgQuery.ColumnRef{} = node, %Ctx{has_filter: true}} ->
+            {%PgQuery.ColumnRef{} = node, %Ctx{subselect_item: true}} ->
               field =
                 node.fields
+                |> Enum.filter(fn %PgQuery.Node{node: {type, _}} -> type == :string end)
                 |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
                   sval
                 end)
@@ -115,6 +123,42 @@ defmodule ExPgQuery.Parser do
        }}
     end
   end
+
+  def tables(%Result{tables: tables}),
+    do: Enum.map(tables, & &1.name)
+
+  def select_tables(%Result{tables: tables}),
+    do:
+      tables
+      |> Enum.filter(&(&1.type == :select))
+      |> Enum.map(& &1.name)
+
+  def ddl_tables(%Result{tables: tables}),
+    do:
+      tables
+      |> Enum.filter(&(&1.type == :ddl))
+      |> Enum.map(& &1.name)
+
+  def dml_tables(%Result{tables: tables}),
+    do:
+      tables
+      |> Enum.filter(&(&1.type == :dml))
+      |> Enum.map(& &1.name)
+
+  def functions(%Result{functions: functions}),
+    do: Enum.map(functions, & &1.name)
+
+  def call_functions(%Result{functions: functions}),
+    do:
+      functions
+      |> Enum.filter(&(&1.type == :call))
+      |> Enum.map(& &1.name)
+
+  def ddl_functions(%Result{functions: functions}),
+    do:
+      functions
+      |> Enum.filter(&(&1.type == :ddl))
+      |> Enum.map(& &1.name)
 
   def statement_types(%Result{protobuf: %PgQuery.ParseResult{stmts: stmts}}) do
     Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {stmt_type, _}}} ->

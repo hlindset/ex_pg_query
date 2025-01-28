@@ -28,7 +28,9 @@ defmodule ExPgQuery.NodeTraversal do
     defstruct type: nil,
               has_filter: false,
               current_cte: nil,
-              is_recursive_cte: false
+              is_recursive_cte: false,
+              subselect_item: false,
+              from_clause_item: false
   end
 
   @doc """
@@ -49,6 +51,7 @@ defmodule ExPgQuery.NodeTraversal do
       %{stmt: %{node: {_type, node}}} ->
         traverse_node(node, %Ctx{})
         |> List.flatten()
+
       _ ->
         []
     end)
@@ -84,16 +87,28 @@ defmodule ExPgQuery.NodeTraversal do
   # Updates context based on the type of node being processed
   defp ctx_for_node(%PgQuery.SelectStmt{}, ctx),
     do: %Ctx{ctx | type: :select}
+
   defp ctx_for_node(%PgQuery.WithClause{recursive: recursive}, ctx),
     do: %Ctx{ctx | is_recursive_cte: recursive}
+
   defp ctx_for_node(%PgQuery.CommonTableExpr{ctename: ctename}, ctx),
     do: %Ctx{ctx | current_cte: ctename}
-  defp ctx_for_node(_node, ctx),
-    do: ctx
+
+  defp ctx_for_node(_node, ctx), do: ctx
 
   # Updates context based on specific fields within nodes
-  defp ctx_for_field(%PgQuery.SelectStmt{}, :where_clause, ctx),
-    do: %Ctx{ctx | has_filter: true}
+  defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx)
+       when field in [:target_list, :where_clause, :sort_clause, :group_clause, :having_clause],
+       do: %Ctx{ctx | subselect_item: true}
+
+  defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx)
+       when field in [:from_clause],
+       do: %Ctx{ctx | from_clause_item: true}
+
+  defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx)
+       when field in [:into_clause],
+       do: %Ctx{ctx | from_clause_item: true, type: :ddl}
+
   defp ctx_for_field(_node, _field, ctx),
     do: ctx
 
@@ -105,18 +120,19 @@ defmodule ExPgQuery.NodeTraversal do
       _ -> false
     end)
     |> Enum.map(fn field_def ->
-      value = case field_def do
-        # Handle oneof fields (special case for PgQuery.Node)
-        %Protox.Field{kind: {:oneof, oneof_field}, name: name} ->
-          case Map.get(msg, oneof_field) do
-            {^name, value} -> value
-            _ -> nil
-          end
+      value =
+        case field_def do
+          # Handle oneof fields (special case for PgQuery.Node)
+          %Protox.Field{kind: {:oneof, oneof_field}, name: name} ->
+            case Map.get(msg, oneof_field) do
+              {^name, value} -> value
+              _ -> nil
+            end
 
-        # Handle regular message fields
-        _ ->
-          Map.get(msg, field_def.name)
-      end
+          # Handle regular message fields
+          _ ->
+            Map.get(msg, field_def.name)
+        end
 
       {field_def.name, value}
     end)

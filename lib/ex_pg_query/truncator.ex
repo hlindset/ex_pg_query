@@ -83,7 +83,7 @@ defmodule ExPgQuery.Truncator do
           {:ok, output}
         else
           # If smart truncation wasn't enough, do hard truncation
-          slice_end = (max_length - @ellipsis_length - 1)
+          slice_end = max_length - @ellipsis_length - 1
           {:ok, String.slice(output, 0..max(slice_end, 0)) <> @ellipsis}
         end
 
@@ -94,18 +94,18 @@ defmodule ExPgQuery.Truncator do
 
   defp try_smart_truncation(tree, truncations, max_length) do
     final_tree =
-    Enum.reduce_while(truncations, {:ok, tree}, fn truncation, {:ok, tree_acc} ->
-      with {:ok, updated_tree} <- update_tree(tree_acc, truncation),
-           {:ok, {length, output}} <- query_length(updated_tree) do
-        if length > max_length do
-          {:cont, {:ok, updated_tree}}
+      Enum.reduce_while(truncations, {:ok, tree}, fn truncation, {:ok, tree_acc} ->
+        with {:ok, updated_tree} <- update_tree(tree_acc, truncation),
+             {:ok, {length, output}} <- query_length(updated_tree) do
+          if length > max_length do
+            {:cont, {:ok, updated_tree}}
+          else
+            {:halt, {:ok, updated_tree}}
+          end
         else
-          {:halt, {:ok, updated_tree}}
+          {:error, _} = error -> {:halt, error}
         end
-      else
-        {:error, _} = error -> {:halt, error}
-      end
-    end)
+      end)
 
     with {:ok, final_tree} <- final_tree do
       query_length(final_tree)

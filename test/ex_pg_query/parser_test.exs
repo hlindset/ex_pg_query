@@ -7,7 +7,7 @@ defmodule ExPgQuery.ParserTest do
     test "parses simple SELECT query" do
       {:ok, result} = Parser.parse("SELECT 1")
 
-      assert result.tables == []
+      assert assert_tables(result, [])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -31,7 +31,7 @@ defmodule ExPgQuery.ParserTest do
           WHERE s.database_id = $1
         """)
 
-      assert Enum.sort(result.tables) == ["snapshots", "system_snapshots"]
+      assert_select_tables(result, ["snapshots", "system_snapshots"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -39,7 +39,7 @@ defmodule ExPgQuery.ParserTest do
     test "parses empty queries" do
       {:ok, result} = Parser.parse("-- nothing")
 
-      assert result.tables == []
+      assert assert_tables(result, [])
       assert result.cte_names == []
       assert_statement_types(result, [])
     end
@@ -47,7 +47,7 @@ defmodule ExPgQuery.ParserTest do
     test "parses nested SELECT in FROM clause" do
       {:ok, result} = Parser.parse("SELECT u.* FROM (SELECT * FROM users) u")
 
-      assert result.tables == ["users"]
+      assert_select_tables(result, ["users"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -60,7 +60,7 @@ defmodule ExPgQuery.ParserTest do
           WHERE 1 = (SELECT COUNT(*) FROM user_roles)
         """)
 
-      assert Enum.sort(result.tables) == ["user_roles", "users"]
+      assert_select_tables(result, ["user_roles", "users"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -72,7 +72,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT * FROM cte
         """)
 
-      assert result.tables == ["x"]
+      assert_select_tables(result, ["x"])
       assert result.cte_names == ["cte"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -87,7 +87,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b"]
+      assert_select_tables(result, ["table_a", "table_b"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -100,7 +100,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b"]
+      assert_select_tables(result, ["table_a", "table_b"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -113,7 +113,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b"]
+      assert_select_tables(result, ["table_a", "table_b"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -132,7 +132,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_d
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b", "table_c", "table_d"]
+      assert_select_tables(result, ["table_a", "table_b", "table_c", "table_d"])
       assert Enum.sort(result.cte_names) == ["cte_a", "cte_b"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -152,7 +152,7 @@ defmodule ExPgQuery.ParserTest do
           )
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b", "table_c", "table_d"]
+      assert_select_tables(result, ["table_a", "table_b", "table_c", "table_d"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -167,7 +167,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_c
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b", "table_c"]
+      assert_select_tables(result, ["table_a", "table_b", "table_c"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -180,7 +180,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b"]
+      assert_select_tables(result, ["table_a", "table_b"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -193,7 +193,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b"]
+      assert_select_tables(result, ["table_a", "table_b"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -216,7 +216,7 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY id
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b", "table_c", "table_d"]
+      assert_select_tables(result, ["table_a", "table_b", "table_c", "table_d"])
       assert Enum.sort(result.cte_names) == ["cte_a", "cte_b"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -240,7 +240,7 @@ defmodule ExPgQuery.ParserTest do
           SELECT * FROM tree ORDER BY level, id
         """)
 
-      assert Enum.sort(result.tables) == ["org_tree"]
+      assert_select_tables(result, ["org_tree"])
       assert result.cte_names == ["tree"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -267,14 +267,14 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY id DESC
         """)
 
-      assert Enum.sort(result.tables) == [
-               "table_a",
-               "table_b",
-               "table_c",
-               "table_d",
-               "table_e",
-               "table_f"
-             ]
+      assert_select_tables(result, [
+        "table_a",
+        "table_b",
+        "table_c",
+        "table_d",
+        "table_e",
+        "table_f"
+      ])
 
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
@@ -292,7 +292,7 @@ defmodule ExPgQuery.ParserTest do
           LIMIT 5 OFFSET 2
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b", "table_c"]
+      assert_select_tables(result, ["table_a", "table_b", "table_c"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -313,14 +313,14 @@ defmodule ExPgQuery.ParserTest do
           )
         """)
 
-      assert Enum.sort(result.tables) == [
-               "table_a",
-               "table_b",
-               "table_c",
-               "table_d",
-               "table_e",
-               "table_f"
-             ]
+      assert_select_tables(result, [
+        "table_a",
+        "table_b",
+        "table_c",
+        "table_d",
+        "table_e",
+        "table_f"
+      ])
 
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
@@ -343,12 +343,12 @@ defmodule ExPgQuery.ParserTest do
           ) x
         """)
 
-      assert Enum.sort(result.tables) == [
-               "archived_items",
-               "extra_types",
-               "items",
-               "special_types"
-             ]
+      assert_select_tables(result, [
+        "archived_items",
+        "extra_types",
+        "items",
+        "special_types"
+      ])
 
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
@@ -383,7 +383,7 @@ defmodule ExPgQuery.ParserTest do
           ) leaf_nodes
         """)
 
-      assert Enum.sort(result.tables) == ["graph"]
+      assert_select_tables(result, ["graph"])
       assert result.cte_names == ["search_graph"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -409,13 +409,13 @@ defmodule ExPgQuery.ParserTest do
           ) counts
         """)
 
-      assert Enum.sort(result.tables) == [
-               "archived_comments",
-               "archived_users",
-               "comments",
-               "posts",
-               "users"
-             ]
+      assert_select_tables(result, [
+        "archived_comments",
+        "archived_users",
+        "comments",
+        "posts",
+        "users"
+      ])
 
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
@@ -445,13 +445,13 @@ defmodule ExPgQuery.ParserTest do
           )
         """)
 
-      assert Enum.sort(result.tables) == [
-               "active_users",
-               "excluded_statuses",
-               "pending_users",
-               "users",
-               "valid_statuses"
-             ]
+      assert_select_tables(result, [
+        "active_users",
+        "excluded_statuses",
+        "pending_users",
+        "users",
+        "valid_statuses"
+      ])
 
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
@@ -473,12 +473,12 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY created_at DESC NULLS LAST
         """)
 
-      assert Enum.sort(result.tables) == [
-               "external_users",
-               "legacy_users",
-               "users",
-               "verified_users"
-             ]
+      assert_select_tables(result, [
+        "external_users",
+        "legacy_users",
+        "users",
+        "verified_users"
+      ])
 
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
@@ -499,7 +499,7 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY id
         """)
 
-      assert Enum.sort(result.tables) == ["table_a", "table_b"]
+      assert_select_tables(result, ["table_a", "table_b"])
       assert result.cte_names == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -523,16 +523,16 @@ defmodule ExPgQuery.ParserTest do
           WHERE amount > any(select unnest(array_agg(amount)) from other_transactions)
         """)
 
-      assert Enum.sort(result.functions) == [
-               "array_agg",
-               "avg",
-               "count",
-               "json_agg",
-               "json_build_object",
-               "my_custom_func",
-               "sum",
-               "unnest"
-             ]
+      assert_call_functions(result, [
+        "array_agg",
+        "avg",
+        "count",
+        "json_agg",
+        "json_build_object",
+        "my_custom_func",
+        "sum",
+        "unnest"
+      ])
     end
 
     test "extracts filter columns from WHERE clauses" do
@@ -617,7 +617,7 @@ defmodule ExPgQuery.ParserTest do
         ) p
         """)
 
-      assert Enum.sort(result.tables) == ["posts", "users"]
+      assert_select_tables(result, ["posts", "users"])
       assert Enum.sort(result.table_aliases) == ["p", "u"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -631,9 +631,9 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       # generate_series is a function, not a table
-      assert result.tables == []
+      assert assert_tables(result, [])
       assert Enum.sort(result.table_aliases) == []
-      assert Enum.sort(result.functions) == ["generate_series"]
+      assert_call_functions(result, ["generate_series"])
       assert_statement_types(result, [:select_stmt])
     end
 
@@ -650,7 +650,7 @@ defmodule ExPgQuery.ParserTest do
         WHERE v.x > 1
         """)
 
-      assert result.tables == []
+      assert assert_tables(result, [])
       assert Enum.sort(result.table_aliases) == []
       assert_statement_types(result, [:select_stmt])
     end
@@ -666,7 +666,7 @@ defmodule ExPgQuery.ParserTest do
         WHERE u.active = true
         """)
 
-      assert Enum.sort(result.tables) == ["comments", "post_stats", "posts", "users"]
+      assert_select_tables(result, ["comments", "post_stats", "posts", "users"])
       assert Enum.sort(result.table_aliases) == ["c", "p", "ps", "u"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -680,7 +680,7 @@ defmodule ExPgQuery.ParserTest do
         LEFT JOIN stats.user_metrics um ON um.user_id = u.id
         """)
 
-      assert Enum.sort(result.tables) == ["analytics.posts", "public.users", "stats.user_metrics"]
+      assert_select_tables(result, ["analytics.posts", "public.users", "stats.user_metrics"])
       assert Enum.sort(result.table_aliases) == ["p", "u", "um"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -697,7 +697,7 @@ defmodule ExPgQuery.ParserTest do
         GROUP BY u.id, u.type
         """)
 
-      assert result.tables == ["users"]
+      assert_select_tables(result, ["users"])
       assert result.table_aliases == ["u"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -715,7 +715,7 @@ defmodule ExPgQuery.ParserTest do
         JOIN items "MixedCase" ON "MixedCase".user_id = "Users".id
         """)
 
-      assert Enum.sort(result.tables) == ["items", "users"]
+      assert_select_tables(result, ["items", "users"])
       assert Enum.sort(result.table_aliases) == ["MixedCase", "Users"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -732,7 +732,7 @@ defmodule ExPgQuery.ParserTest do
         JOIN groups "group" ON "group".id = "select".group_id
         """)
 
-      assert Enum.sort(result.tables) == ["groups", "orders", "users"]
+      assert_select_tables(result, ["groups", "orders", "users"])
       assert Enum.sort(result.table_aliases) == ["group", "order", "select"]
       assert_statement_types(result, [:select_stmt])
     end
@@ -767,7 +767,7 @@ defmodule ExPgQuery.ParserTest do
         ) stats ON true
         """)
 
-      assert Enum.sort(result.tables) == ["payments", "posts", "users"]
+      assert_select_tables(result, ["payments", "posts", "users"])
 
       assert Enum.sort(result.table_aliases) == ["p", "pay", "u"]
 
@@ -797,7 +797,7 @@ defmodule ExPgQuery.ParserTest do
       """
 
       {:ok, result} = Parser.parse(query_text)
-      assert Enum.sort(result.tables) == Enum.sort(Enum.map(0..29, &"t#{&1}"))
+      assert_select_tables(result, Enum.map(0..29, &"t#{&1}"))
     end
 
     test "parses really deep queries (3)" do
@@ -806,12 +806,254 @@ defmodule ExPgQuery.ParserTest do
           Enum.join(Enum.map(1..100, &"JOIN foo_#{&1} ON foo.id = foo_#{&1}.foo_id"), " ")
 
       {:ok, result} = Parser.parse(query_text)
-      assert Enum.sort(result.tables) == Enum.sort(Enum.map(1..100, &"foo_#{&1}") ++ ["foo"])
+      assert_select_tables(result, Enum.map(1..100, &"foo_#{&1}") ++ ["foo"])
     end
+  end
+
+  # describe "parse/1 for DML statements" do
+  #   test "parses INSERT statements" do
+  #     {:ok, result} =
+  #       Parser.parse("""
+  #       INSERT INTO users (name, email, created_at)
+  #       VALUES
+  #         ('John Doe', 'john@example.com', NOW()),
+  #         ('Jane Doe', 'jane@example.com', NOW())
+  #       RETURNING id, name
+  #       """)
+
+  #     assert_select_tables(result, ["users"])
+  #     assert result.cte_names == []
+  #     assert_statement_types(result, [:insert_stmt])
+  #   end
+
+  #   test "parses INSERT with SELECT" do
+  #     {:ok, result} =
+  #       Parser.parse("""
+  #       WITH archived AS (
+  #         SELECT id, name, email FROM archived_users WHERE status = 'active'
+  #       )
+  #       INSERT INTO users (name, email)
+  #       SELECT name, email FROM archived
+  #       RETURNING id
+  #       """)
+
+  #     assert_select_tables(result, ["archived_users", "users"])
+  #     assert result.cte_names == ["archived"]
+  #     assert_statement_types(result, [:insert_stmt])
+  #   end
+
+  #   test "parses UPDATE statements" do
+  #     {:ok, result} =
+  #       Parser.parse("""
+  #       UPDATE users u
+  #       SET
+  #         status = 'inactive',
+  #         updated_at = NOW()
+  #       FROM user_sessions us
+  #       WHERE u.id = us.user_id
+  #         AND us.last_activity < NOW() - INTERVAL '30 days'
+  #       RETURNING u.id, u.status
+  #       """)
+
+  #     assert_select_tables(result, ["user_sessions", "users"])
+  #     assert result.cte_names == []
+  #     assert Enum.sort(result.table_aliases) == ["u", "us"]
+  #     assert_statement_types(result, [:update_stmt])
+  #   end
+
+  #   test "parses DELETE statements" do
+  #     {:ok, result} =
+  #       Parser.parse("""
+  #       WITH inactive_users AS (
+  #         SELECT id FROM users
+  #         WHERE last_login < NOW() - INTERVAL '1 year'
+  #       )
+  #       DELETE FROM user_data
+  #       USING inactive_users
+  #       WHERE user_data.user_id = inactive_users.id
+  #       RETURNING user_id
+  #       """)
+
+  #     assert_select_tables(result, ["user_data", "users"])
+  #     assert result.cte_names == ["inactive_users"]
+  #     assert_statement_types(result, [:delete_stmt])
+  #   end
+
+  #   test "parses MERGE statements" do
+  #     {:ok, result} =
+  #       Parser.parse("""
+  #       MERGE INTO customer_accounts ca
+  #       USING payment_transactions pt
+  #       ON ca.id = pt.account_id
+  #       WHEN MATCHED THEN
+  #         UPDATE SET balance = ca.balance + pt.amount
+  #       WHEN NOT MATCHED THEN
+  #         INSERT (id, balance) VALUES (pt.account_id, pt.amount)
+  #       """)
+
+  #     assert_select_tables(result, ["customer_accounts", "payment_transactions"])
+  #     assert result.cte_names == []
+  #     assert Enum.sort(result.table_aliases) == ["ca", "pt"]
+  #     assert_statement_types(result, [:merge_stmt])
+  #   end
+  # end
+
+  describe "parse/1 for DDL statements" do
+    test "finds the table in a SELECT INTO that is being created" do
+      {:ok, result} =
+        Parser.parse(~s|SELECT * INTO films_recent FROM films WHERE date_prod >= "2002-01-01"|)
+
+      assert Parser.ddl_tables(result) == ["films_recent"]
+      assert Parser.select_tables(result) == ["films"]
+    end
+
+    #   test "parses CREATE TABLE statements" do
+    #     {:ok, result} =
+    #       Parser.parse("""
+    #       CREATE TABLE users (
+    #         id SERIAL PRIMARY KEY,
+    #         name VARCHAR(255) NOT NULL,
+    #         email VARCHAR(255) UNIQUE,
+    #         status user_status DEFAULT 'pending',
+    #         created_at TIMESTAMP DEFAULT NOW(),
+    #         CONSTRAINT valid_status CHECK (status IN ('pending', 'active', 'inactive')),
+    #         CONSTRAINT unique_email UNIQUE (email)
+    #       )
+    #       """)
+
+    #     assert_select_tables(result, ["users"])
+    #     assert result.cte_names == []
+    #     assert_statement_types(result, [:create_stmt])
+    #   end
+
+    #   test "parses ALTER TABLE statements" do
+    #     {:ok, result} =
+    #       Parser.parse("""
+    #       ALTER TABLE users
+    #         ADD COLUMN last_login TIMESTAMP,
+    #         ADD COLUMN login_count INTEGER DEFAULT 0,
+    #         DROP COLUMN temporary_token,
+    #         ADD CONSTRAINT positive_login_count CHECK (login_count >= 0),
+    #         ALTER COLUMN status SET DEFAULT 'pending',
+    #         DROP CONSTRAINT IF EXISTS old_constraint
+    #       """)
+
+    #     assert_select_tables(result, ["users"])
+    #     assert result.cte_names == []
+    #     assert_statement_types(result, [:alter_table_stmt])
+    #   end
+
+    #   test "parses CREATE INDEX statements" do
+    #     {:ok, result} =
+    #       Parser.parse("""
+    #       CREATE UNIQUE INDEX CONCURRENTLY users_email_idx
+    #       ON users (LOWER(email))
+    #       WHERE deleted_at IS NULL
+    #       """)
+
+    #     assert_select_tables(result, ["users"])
+    #     assert result.cte_names == []
+    #     assert_statement_types(result, [:index_stmt])
+    #   end
+
+    #   test "parses CREATE VIEW statements" do
+    #     {:ok, result} =
+    #       Parser.parse("""
+    #       CREATE OR REPLACE VIEW active_users AS
+    #       SELECT u.*, COUNT(s.id) as session_count
+    #       FROM users u
+    #       LEFT JOIN sessions s ON s.user_id = u.id
+    #       WHERE u.status = 'active'
+    #       GROUP BY u.id
+    #       """)
+
+    #     assert_select_tables(result, ["sessions", "users"])
+    #     assert result.cte_names == []
+    #     assert Enum.sort(result.table_aliases) == ["s", "u"]
+    #     assert_statement_types(result, [:view_stmt])
+    #   end
+
+    #   test "parses DROP statements" do
+    #     {:ok, result} =
+    #       Parser.parse("""
+    #       DROP TABLE IF EXISTS temporary_users CASCADE;
+    #       DROP INDEX IF EXISTS users_email_idx;
+    #       DROP VIEW IF EXISTS active_users;
+    #       DROP SEQUENCE IF EXISTS user_id_seq;
+    #       """)
+
+    #     assert_select_tables(result, ["temporary_users"])
+    #     assert result.cte_names == []
+    #     assert_statement_types(result, [:drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt])
+    #   end
+
+    #   test "parses CREATE SEQUENCE statements" do
+    #     {:ok, result} =
+    #       Parser.parse("""
+    #       CREATE SEQUENCE IF NOT EXISTS order_id_seq
+    #       INCREMENT BY 1
+    #       START WITH 1000
+    #       NO MINVALUE
+    #       NO MAXVALUE
+    #       CACHE 1
+    #       """)
+
+    #     assert assert_tables(result, [])
+    #     assert result.cte_names == []
+    #     assert_statement_types(result, [:create_seq_stmt])
+    #   end
+
+    #   test "parses CREATE SCHEMA statements" do
+    #     {:ok, result} =
+    #       Parser.parse("""
+    #       CREATE SCHEMA IF NOT EXISTS analytics
+    #       CREATE TABLE daily_stats (
+    #         id SERIAL PRIMARY KEY,
+    #         date DATE NOT NULL,
+    #         visits INTEGER DEFAULT 0
+    #       )
+    #       CREATE VIEW monthly_stats AS
+    #         SELECT date_trunc('month', date) as month, SUM(visits) as total_visits
+    #         FROM daily_stats
+    #         GROUP BY date_trunc('month', date)
+    #       """)
+
+    #     assert_select_tables(result, ["daily_stats"])
+    #     assert result.cte_names == []
+    #     assert_statement_types(result, [:create_schema_stmt])
+    #   end
   end
 
   # Helper to assert statement types
   defp assert_statement_types(result, expected) do
     assert Parser.statement_types(result) == expected
+  end
+
+  defp assert_tables(result, expected) do
+    assert Enum.sort(Parser.tables(result)) == Enum.sort(expected)
+  end
+
+  defp assert_select_tables(result, expected) do
+    assert Enum.sort(Parser.select_tables(result)) == Enum.sort(expected)
+  end
+
+  defp assert_ddl_tables(result, expected) do
+    assert Enum.sort(Parser.ddl_tables(result)) == Enum.sort(expected)
+  end
+
+  defp assert_dml_tables(result, expected) do
+    assert Enum.sort(Parser.dml_tables(result)) == Enum.sort(expected)
+  end
+
+  defp assert_functions(result, expected) do
+    assert Enum.sort(Parser.functions(result)) == Enum.sort(expected)
+  end
+
+  defp assert_call_functions(result, expected) do
+    assert Enum.sort(Parser.call_functions(result)) == Enum.sort(expected)
+  end
+
+  defp assert_ddl_functions(result, expected) do
+    assert Enum.sort(Parser.ddl_functions(result)) == Enum.sort(expected)
   end
 end
