@@ -40,44 +40,6 @@ defmodule ExPgQuery.Parser do
                   cte_names: acc.cte_names ++ ctx.cte_names
               }
 
-            {%PgQuery.RangeVar{} = node, %Ctx{type: type, from_clause_item: true} = ctx} ->
-              table_name =
-                case node do
-                  %PgQuery.RangeVar{schemaname: "", relname: relname} ->
-                    relname
-
-                  %PgQuery.RangeVar{schemaname: schemaname, relname: relname} ->
-                    "#{schemaname}.#{relname}"
-                end
-
-              is_cte_name =
-                Enum.member?(ctx.cte_names, table_name) || ctx.current_cte == table_name
-
-              cond do
-                # we're outside a cte, so it's a cte reference
-                is_cte_name && ctx.current_cte == nil ->
-                  acc
-
-                # we're inside a recursive cte, so it's a cte's reference to itself
-                is_cte_name && ctx.current_cte == table_name && ctx.is_recursive_cte ->
-                  acc
-
-                # otherwise, it's a cte's reference to a table with the same name
-                # or just a table reference
-                true ->
-                  table = %{
-                    name: table_name,
-                    type: type,
-                    location: node.location,
-                    schemaname: if(node.schemaname == "", do: nil, else: node.schemaname),
-                    relname: node.relname,
-                    inh: node.inh,
-                    relpersistence: node.relpersistence
-                  }
-
-                  %Result{acc | tables: [table | acc.tables]}
-              end
-
             {%PgQuery.DropStmt{remove_type: remove_type} = node, %Ctx{type: type}}
             when remove_type in [
                    :OBJECT_TABLE,
@@ -159,11 +121,50 @@ defmodule ExPgQuery.Parser do
             # from clause items
             #
 
+            {%PgQuery.RangeVar{} = node, %Ctx{type: type, from_clause_item: true} = ctx} ->
+              table_name =
+                case node do
+                  %PgQuery.RangeVar{schemaname: "", relname: relname} ->
+                    relname
+
+                  %PgQuery.RangeVar{schemaname: schemaname, relname: relname} ->
+                    "#{schemaname}.#{relname}"
+                end
+
+              is_cte_name =
+                Enum.member?(ctx.cte_names, table_name) || ctx.current_cte == table_name
+
+              cond do
+                # we're outside a cte, so it's a cte reference
+                is_cte_name && ctx.current_cte == nil ->
+                  acc
+
+                # we're inside a recursive cte, so it's a cte's reference to itself
+                is_cte_name && ctx.current_cte == table_name && ctx.is_recursive_cte ->
+                  acc
+
+                # otherwise, it's a cte's reference to a table with the same name
+                # or just a table reference
+                true ->
+                  table = %{
+                    name: table_name,
+                    type: type,
+                    location: node.location,
+                    schemaname: if(node.schemaname == "", do: nil, else: node.schemaname),
+                    relname: node.relname,
+                    inh: node.inh,
+                    relpersistence: node.relpersistence
+                  }
+
+                  %Result{acc | tables: [table | acc.tables]}
+              end
+
             #
             # both from clause items and subselect items
             #
 
-            {%PgQuery.FuncCall{} = node, _ctx} ->
+            {node, %Ctx{type: type}}
+            when is_struct(node, PgQuery.FuncCall) or is_struct(node, PgQuery.CreateFunctionStmt) ->
               function =
                 node.funcname
                 |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
@@ -171,7 +172,7 @@ defmodule ExPgQuery.Parser do
                 end)
                 |> Enum.join(".")
 
-              %Result{acc | functions: [%{name: function, type: :call} | acc.functions]}
+              %Result{acc | functions: [%{name: function, type: type} | acc.functions]}
 
             _ ->
               acc

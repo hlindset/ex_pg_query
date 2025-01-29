@@ -5,12 +5,6 @@ defmodule ExPgQuery.NodeTraversal do
   This module provides functionality to walk through a parsed PostgreSQL query tree,
   collecting each node along with contextual information about where it appears in
   the query structure.
-
-  The traversal maintains context about:
-  - The type of statement being processed (select, DML, etc.)
-  - Whether we're in a filtering context (WHERE clause)
-  - CTE (Common Table Expression) information
-  - Position in the query tree
   """
 
   defmodule Ctx do
@@ -19,14 +13,12 @@ defmodule ExPgQuery.NodeTraversal do
 
     Fields:
     - type: The type of statement (:none, :select, :dml, :ddl, :call)
-    - has_filter: Whether we're in a filtering context (e.g., WHERE clause)
     - current_cte: Name of the CTE currently being processed, if any
     - is_recursive_cte: Whether the current CTE is recursive
     """
     @type stmt_type :: :none | :select | :dml | :ddl | :call
 
     defstruct type: :none,
-              has_filter: false,
               current_cte: nil,
               is_recursive_cte: false,
               subselect_item: false,
@@ -111,6 +103,10 @@ defmodule ExPgQuery.NodeTraversal do
   defp ctx_for_node(%PgQuery.DeleteStmt{} = delete_stmt, ctx) do
     cte_names = collect_cte_names(delete_stmt.with_clause)
     %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
+  end
+
+  defp ctx_for_node(%PgQuery.FuncCall{}, ctx) do
+    %Ctx{ctx | type: :call}
   end
 
   defp ctx_for_node(node, ctx)

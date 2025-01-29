@@ -249,6 +249,8 @@ defmodule ExPgQuery.Parser3Test do
 
       assert_tables_eq(result, [])
       assert_functions_eq(result, ["getfoo"])
+      assert_ddl_functions_eq(result, ["getfoo"])
+      assert_call_functions_eq(result, [])
     end
 
     test "correctly finds created functions" do
