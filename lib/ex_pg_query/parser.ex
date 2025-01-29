@@ -174,6 +174,31 @@ defmodule ExPgQuery.Parser do
 
               %Result{acc | functions: [%{name: function, type: type} | acc.functions]}
 
+            {%PgQuery.RenameStmt{
+               rename_type: :OBJECT_FUNCTION,
+               newname: newname,
+               object: %PgQuery.Node{
+                 node:
+                   {:object_with_args,
+                    %PgQuery.ObjectWithArgs{
+                      objname: objname
+                    }}
+               }
+             }, %Ctx{type: type}} ->
+              original_name =
+                objname
+                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                  sval
+                end)
+                |> Enum.join(".")
+
+              funcs = [
+                %{name: original_name, type: type},
+                %{name: newname, type: type}
+              ]
+
+              %Result{acc | functions: funcs ++ acc.functions}
+
             _ ->
               acc
           end
