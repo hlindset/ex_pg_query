@@ -33,7 +33,8 @@ defmodule ExPgQuery.NodeTraversal do
               from_clause_item: false,
               join_clause_condition: false,
               where_condition: false,
-              table_aliases: %{}
+              table_aliases: %{},
+              cte_names: []
   end
 
   @doc """
@@ -90,7 +91,8 @@ defmodule ExPgQuery.NodeTraversal do
   # Updates context based on the type of node being processed
   defp ctx_for_node(%PgQuery.SelectStmt{} = select_stmt, ctx) do
     table_aliases = collect_aliases(select_stmt.from_clause)
-    %Ctx{ctx | type: :select, table_aliases: table_aliases}
+    cte_names = collect_cte_names(select_stmt.with_clause)
+    %Ctx{ctx | type: :select, table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
   defp ctx_for_node(node, ctx)
@@ -159,6 +161,19 @@ defmodule ExPgQuery.NodeTraversal do
       {field_def.name, value}
     end)
   end
+
+  defp collect_cte_names(%PgQuery.WithClause{ctes: ctes}) when is_list(ctes) do
+    Enum.reduce(ctes, [], fn
+      %PgQuery.Node{node: {:common_table_expr, %PgQuery.CommonTableExpr{ctename: ctename}}},
+      cte_names ->
+        [ctename | cte_names]
+
+      _, cte_names ->
+        cte_names
+    end)
+  end
+
+  defp collect_cte_names(_with_clause), do: []
 
   defp rvar_to_alias_value(%PgQuery.RangeVar{
          schemaname: schemaname,

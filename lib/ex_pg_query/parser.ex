@@ -19,28 +19,26 @@ defmodule ExPgQuery.Parser do
   def parse(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
          {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
-      nodes = NodeTraversal.nodes(protobuf) # |> dbg(limit: :infinity, printable_limit: :infinity)
+      nodes = NodeTraversal.nodes(protobuf)
       initial_result = %Result{protobuf: protobuf}
 
-      # find all CTEs first, so we can compare table names to CTE names
-      # without having to worry about the order in which they appear
-      # in the nodes list
-      cte_results =
-        Enum.reduce(nodes, initial_result, fn node_with_ctx, acc ->
-          case node_with_ctx do
-            {%PgQuery.CommonTableExpr{} = node, _} ->
-              %Result{acc | cte_names: [node.ctename | acc.cte_names]}
-
-            _ ->
-              acc
-          end
-        end)
-
       result =
-        Enum.reduce(nodes, cte_results, fn node, acc ->
+        Enum.reduce(nodes, initial_result, fn node, acc ->
           case node do
             {%PgQuery.SelectStmt{}, %Ctx{} = ctx} ->
-              %Result{acc | table_aliases: acc.table_aliases ++ Map.values(ctx.table_aliases)}
+              new_table_aliases =
+                ctx.table_aliases
+                # we don't want to collect aliases for CTEs
+                |> Map.reject(fn {_k, %{relation: relation}} ->
+                  Enum.member?(ctx.cte_names, relation)
+                end)
+                |> Map.values()
+
+              %Result{
+                acc
+                | table_aliases: acc.table_aliases ++ new_table_aliases,
+                  cte_names: acc.cte_names ++ ctx.cte_names
+              }
 
             {%PgQuery.RangeVar{} = node, %Ctx{type: type} = ctx} ->
               table_name =
@@ -53,7 +51,7 @@ defmodule ExPgQuery.Parser do
                 end
 
               is_cte_name =
-                Enum.member?(acc.cte_names, table_name) || ctx.current_cte == table_name
+                Enum.member?(ctx.cte_names, table_name) || ctx.current_cte == table_name
 
               cond do
                 # we're outside a cte, so it's a cte reference
@@ -77,22 +75,7 @@ defmodule ExPgQuery.Parser do
                     relpersistence: node.relpersistence
                   }
 
-                  %Result{acc | tables: [table | acc.tables], table_aliases: acc.table_aliases ++ Map.values(ctx.table_aliases)}
-
-                  # # if there's an alias, store it
-                  # case node.alias do
-                  #   %PgQuery.Alias{aliasname: aliasname} ->
-                  #     %Result{
-                  #       result
-                  #       | table_aliases:
-                  #           Map.merge(result.table_aliases, %{
-                  #             aliasname => %{name: table_name, type: type}
-                  #           })
-                  #     }
-
-                  #   nil ->
-                  #     result
-                  # end
+                  %Result{ acc | tables: [table | acc.tables] }
               end
 
             {%PgQuery.DropStmt{remove_type: remove_type} = node, %Ctx{type: type} = ctx} ->
@@ -107,10 +90,6 @@ defmodule ExPgQuery.Parser do
                   %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
                     sval
                 end)
-
-              # |> dbg()
-
-              # acc
 
               case remove_type do
                 rt when rt in [:OBJECT_TABLE, :OBJECT_VIEW] ->
