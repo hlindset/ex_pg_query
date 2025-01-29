@@ -69,20 +69,35 @@ defmodule ExPgQuery.Parser do
                     name: table_name,
                     type: type,
                     location: node.location,
-                    schemaname: node.schemaname,
+                    schemaname: if(node.schemaname == "", do: nil, else: node.schemaname),
                     relname: node.relname,
                     inh: node.inh,
                     relpersistence: node.relpersistence
                   }
 
-                  %Result{ acc | tables: [table | acc.tables] }
+                  %Result{acc | tables: [table | acc.tables]}
               end
 
-            {%PgQuery.DropStmt{remove_type: remove_type} = node, %Ctx{type: type} = ctx} ->
+            {%PgQuery.DropStmt{remove_type: remove_type} = node, %Ctx{type: type}}
+            when remove_type in [
+                   :OBJECT_TABLE,
+                   :OBJECT_VIEW,
+                   :OBJECT_FUNCTION,
+                   :OBJECT_RULE,
+                   :OBJECT_TRIGGER
+                 ] ->
               objects =
                 Enum.map(node.objects, fn
                   %PgQuery.Node{node: {:list, list}} ->
                     Enum.map(list.items, fn
+                      %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} -> sval
+                      _ -> nil
+                    end)
+
+                  %PgQuery.Node{
+                    node: {:object_with_args, %PgQuery.ObjectWithArgs{objname: objname}}
+                  } ->
+                    Enum.map(objname, fn
                       %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} -> sval
                       _ -> nil
                     end)
@@ -96,6 +111,19 @@ defmodule ExPgQuery.Parser do
                   Enum.reduce(objects, acc, fn rel, acc ->
                     table = %{name: Enum.join(rel, "."), type: type}
                     %Result{acc | tables: [table | acc.tables]}
+                  end)
+
+                rt when rt in [:OBJECT_RULE, :OBJECT_TRIGGER] ->
+                  Enum.reduce(objects, acc, fn obj, acc ->
+                    name = Enum.slice(obj, 0..-2//-1) |> Enum.join(".")
+                    table = %{name: name, type: type}
+                    %Result{acc | tables: [table | acc.tables]}
+                  end)
+
+                :OBJECT_FUNCTION ->
+                  Enum.reduce(objects, acc, fn rel, acc ->
+                    function = %{name: Enum.join(rel, "."), type: type}
+                    %Result{acc | functions: [function | acc.functions]}
                   end)
 
                 _ ->

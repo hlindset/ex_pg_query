@@ -95,6 +95,16 @@ defmodule ExPgQuery.NodeTraversal do
     %Ctx{ctx | type: :select, table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
+  defp ctx_for_node(%PgQuery.InsertStmt{} = insert_stmt, ctx) do
+    cte_names = collect_cte_names(insert_stmt.with_clause)
+    %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
+  end
+
+  defp ctx_for_node(%PgQuery.UpdateStmt{} = update_stmt, ctx) do
+    cte_names = collect_cte_names(update_stmt.with_clause)
+    %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
+  end
+
   defp ctx_for_node(node, ctx)
        when is_struct(node, PgQuery.CreateStmt) or
               is_struct(node, PgQuery.AlterTableStmt) or

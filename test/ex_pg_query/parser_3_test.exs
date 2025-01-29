@@ -94,7 +94,7 @@ defmodule ExPgQuery.Parser3Test do
       assert_tables_eq(result, ["test"])
       assert_ddl_tables_eq(result, ["test"])
       assert_call_functions_eq(result, ["lower", "upper", "pow"])
-      assert_filter_columns_eq(result, [[nil, "a"]])
+      assert_filter_columns_eq(result, [{nil, "a"}])
     end
 
     test "parses CREATE SCHEMA" do
@@ -140,7 +140,10 @@ defmodule ExPgQuery.Parser3Test do
 
     test "parses DROP VIEW" do
       {:ok, result} = Parser.parse("DROP VIEW myview, myview2")
-      assert_tables_eq(result, [])
+      # here it differs from the ruby implemention. for some reason views aren't
+      # considered to be "tables" in DROP statements, while they are considered
+      # to be tables in CREATE statements. we consider them to be tables in both.
+      assert_tables_eq(result, ["myview", "myview2"])
     end
 
     test "parses DROP INDEX" do
@@ -170,30 +173,30 @@ defmodule ExPgQuery.Parser3Test do
     end
 
     test "parses TRUNCATE" do
-      {:ok, result} = Parser.parse("TRUNCATE bigtable, 'fattable' RESTART IDENTITY")
+      {:ok, result} = Parser.parse(~s|TRUNCATE bigtable, "fattable" RESTART IDENTITY|)
       assert_tables_eq(result, ["bigtable", "fattable"])
       assert_ddl_tables_eq(result, ["bigtable", "fattable"])
 
-      assert result.tables == [
-          %{
-            inh: true,
-            location: 9,
-            name: "bigtable",
-            relname: "bigtable",
-            schemaname: nil,
-            type: :ddl,
-            relpersistence: "p"
-          },
-          %{
-            inh: true,
-            location: 19,
-            name: "fattable",
-            relname: "fattable",
-            schemaname: nil,
-            type: :ddl,
-            relpersistence: "p"
-          }
-        ]
+      assert_raw_tables_eq(result, [
+        %{
+          inh: true,
+          location: 9,
+          name: "bigtable",
+          relname: "bigtable",
+          schemaname: nil,
+          type: :ddl,
+          relpersistence: "p"
+        },
+        %{
+          inh: true,
+          location: 19,
+          name: "fattable",
+          relname: "fattable",
+          schemaname: nil,
+          type: :ddl,
+          relpersistence: "p"
+        }
+      ])
     end
 
     test "parses WITH" do
@@ -234,9 +237,9 @@ defmodule ExPgQuery.Parser3Test do
     test "parses table functions" do
       {:ok, result} =
         Parser.parse("""
-        CREATE FUNCTION getfoo(int) RETURNS TABLE (f1 int) AS "
-            SELECT * FROM foo WHERE fooid = $1;
-        " LANGUAGE SQL
+        CREATE FUNCTION getfoo(int) RETURNS TABLE (f1 int) AS '
+          SELECT * FROM foo WHERE fooid = $1;
+        ' LANGUAGE SQL
         """)
 
       assert_tables_eq(result, [])
@@ -326,7 +329,7 @@ defmodule ExPgQuery.Parser3Test do
 
       assert_tables_eq(result, ["pg_catalog.pg_class"])
       assert_select_tables_eq(result, ["pg_catalog.pg_class"])
-      assert_filter_columns_eq(result, [["pg_catalog.pg_class", "oid"], ["vals", "oid"]])
+      assert_filter_columns_eq(result, [{"pg_catalog.pg_class", "oid"}, {"vals", "oid"}])
     end
 
     test "traverse boolean expressions in where clause" do
@@ -868,56 +871,62 @@ defmodule ExPgQuery.Parser3Test do
 
   test "parses CREATE TEMP TABLE" do
     {:ok, result} =
-      Parser.parse("""
-        CREATE TEMP TABLE foo AS SELECT 1;
-      """)
+      Parser.parse("CREATE TEMP TABLE foo AS SELECT 1;")
 
     assert_tables_eq(result, ["foo"])
     assert_ddl_tables_eq(result, ["foo"])
 
-    assert result.tables == [
-             %{
-               inh: true,
-               location: 24,
-               name: "foo",
-               relname: "foo",
-               relpersistence: "t",
-               schemaname: nil,
-               type: :ddl
-             }
-           ]
+    assert_raw_tables_eq(result, [
+      %{
+        inh: true,
+        location: 18,
+        name: "foo",
+        relname: "foo",
+        relpersistence: "t",
+        schemaname: nil,
+        type: :ddl
+      }
+    ])
   end
 
   describe "filter_columns" do
     test "finds unqualified names" do
       {:ok, result} = Parser.parse("SELECT * FROM x WHERE y = $1 AND z = 1")
-      assert_filter_columns_eq(result, [[nil, "y"], [nil, "z"]])
+      assert_filter_columns_eq(result, [{nil, "y"}, {nil, "z"}])
     end
 
     test "finds qualified names" do
       {:ok, result} = Parser.parse("SELECT * FROM x WHERE x.y = $1 AND x.z = 1")
-      assert_filter_columns_eq(result, [["x", "y"], ["x", "z"]])
+      assert_filter_columns_eq(result, [{"x", "y"}, {"x", "z"}])
     end
 
     test "traverses into CTEs" do
-      {:ok, result} = Parser.parse("WITH a AS (SELECT * FROM x WHERE x.y = $1 AND x.z = 1) SELECT * FROM a WHERE b = 5")
-      assert_filter_columns_eq(result, [["x", "y"], ["x", "z"], [nil, "b"]])
+      {:ok, result} =
+        Parser.parse(
+          "WITH a AS (SELECT * FROM x WHERE x.y = $1 AND x.z = 1) SELECT * FROM a WHERE b = 5"
+        )
+
+      assert_filter_columns_eq(result, [{"x", "y"}, {"x", "z"}, {nil, "b"}])
     end
 
     test "recognizes boolean tests" do
       {:ok, result} = Parser.parse("SELECT * FROM x WHERE x.y IS TRUE AND x.z IS NOT FALSE")
-      assert_filter_columns_eq(result, [["x", "y"], ["x", "z"]])
+      assert_filter_columns_eq(result, [{"x", "y"}, {"x", "z"}])
     end
 
     test "finds COALESCE argument names" do
       {:ok, result} = Parser.parse("SELECT * FROM x WHERE x.y = COALESCE(z.a, z.b)")
-      assert_filter_columns_eq(result, [["x", "y"], ["z", "a"], ["z", "b"]])
+      assert_filter_columns_eq(result, [{"x", "y"}, {"z", "a"}, {"z", "b"}])
     end
 
     for combiner <- ["UNION", "UNION ALL", "EXCEPT", "EXCEPT ALL", "INTERSECT", "INTERSECT ALL"] do
       test "finds unqualified names in #{combiner} query" do
-        {:ok, result} = Parser.parse("SELECT * FROM x where y = $1 #{unquote(combiner)} SELECT * FROM x where z = $2")
-        assert_filter_columns_eq(result, [[nil, "y"], [nil, "z"]])
+        {:ok, result} =
+          Parser.parse(
+            "SELECT * FROM x where y = $1 #{unquote(combiner)} SELECT * FROM x where z = $2"
+          )
+
+        assert_filter_columns_eq(result, [{nil, "y"}, {nil, "z"}])
       end
     end
   end
@@ -941,6 +950,10 @@ defmodule ExPgQuery.Parser3Test do
 
   defp assert_dml_tables_eq(result, expected) do
     assert Enum.sort(Parser.dml_tables(result)) == Enum.sort(expected)
+  end
+
+  defp assert_raw_tables_eq(result, expected) do
+    assert Enum.sort(result.tables) == Enum.sort(expected)
   end
 
   defp assert_functions_eq(result, expected) do
