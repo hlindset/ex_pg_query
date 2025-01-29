@@ -25,7 +25,8 @@ defmodule ExPgQuery.Parser do
       result =
         Enum.reduce(nodes, initial_result, fn node, acc ->
           case node do
-            {%PgQuery.SelectStmt{}, %Ctx{} = ctx} ->
+            {node, %Ctx{} = ctx}
+            when is_struct(node, PgQuery.SelectStmt) or is_struct(node, PgQuery.UpdateStmt) ->
               new_table_aliases =
                 ctx.table_aliases
                 # we don't want to collect aliases for CTEs
@@ -111,8 +112,12 @@ defmodule ExPgQuery.Parser do
                       nil -> {tbl, fld}
                       alias -> {alias_to_name(alias), fld}
                     end
-                  [fld] -> {nil, fld}
-                  _ -> nil
+
+                  [fld] ->
+                    {nil, fld}
+
+                  _ ->
+                    nil
                 end
 
               if field do

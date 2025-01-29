@@ -84,16 +84,15 @@ defmodule ExPgQuery.NodeTraversal do
   #
 
   defp ctx_for_node(%PgQuery.SelectStmt{} = select_stmt, ctx) do
-    table_aliases = collect_aliases(select_stmt.from_clause)
-
-    final_aliases = case ctx do
-      # in case of subqueries - merge into previous aliases
-      %Ctx{subselect_item: true} -> Map.merge(ctx.table_aliases, table_aliases)
-      _ -> table_aliases
-    end
+    table_aliases =
+      case ctx do
+        # in case of subqueries - keep previous aliases
+        %Ctx{subselect_item: true} -> collect_select_aliases(ctx.table_aliases, select_stmt)
+        _ -> collect_select_aliases(%{}, select_stmt)
+      end
 
     cte_names = collect_cte_names(select_stmt.with_clause)
-    %Ctx{ctx | type: :select, table_aliases: final_aliases, cte_names: ctx.cte_names ++ cte_names}
+    %Ctx{ctx | type: :select, table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
   # SubLink (subqueries)
@@ -106,8 +105,9 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   defp ctx_for_node(%PgQuery.UpdateStmt{} = update_stmt, ctx) do
+    table_aliases = collect_update_aliases(update_stmt)
     cte_names = collect_cte_names(update_stmt.with_clause)
-    %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
+    %Ctx{ctx | type: :dml, table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
   defp ctx_for_node(%PgQuery.DeleteStmt{} = delete_stmt, ctx) do
@@ -169,6 +169,9 @@ defmodule ExPgQuery.NodeTraversal do
     do: %Ctx{ctx | type: :select, from_clause_item: true}
 
   # UPDATE
+  defp ctx_for_field(%PgQuery.UpdateStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :dml, from_clause_item: true}
+
   defp ctx_for_field(%PgQuery.UpdateStmt{}, :where_clause, ctx),
     do: %Ctx{ctx | type: :select, condition_item: true}
 
@@ -287,58 +290,64 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp collect_cte_names(_with_clause), do: []
 
-  defp rvar_to_alias_value(%PgQuery.RangeVar{
+  defp collect_select_aliases(aliases, %PgQuery.SelectStmt{from_clause: from_clause}) do
+    collect_from_clause_aliases(aliases, from_clause)
+  end
+
+  defp collect_update_aliases(%PgQuery.UpdateStmt{relation: relation, from_clause: from_clause}) do
+    %{}
+    |> collect_rvar_aliases(relation)
+    |> collect_from_clause_aliases(from_clause)
+  end
+
+  defp collect_update_aliases(_update_stmt), do: %{}
+
+  defp collect_from_clause_aliases(aliases, from_clause) when is_list(from_clause) do
+    Enum.reduce(from_clause, aliases, fn
+      %PgQuery.Node{node: {:range_var, rvar}}, aliases_acc ->
+        collect_rvar_aliases(aliases_acc, rvar)
+
+      %PgQuery.Node{node: {:join_expr, join}}, aliases_acc ->
+        collect_join_aliases(aliases_acc, join)
+
+      _other, aliases_acc ->
+        aliases_acc
+    end)
+  end
+
+  defp collect_from_clause_aliases(aliases, _from_clause), do: aliases
+
+  defp collect_rvar_aliases(aliases, %PgQuery.RangeVar{
          schemaname: schemaname,
          relname: relname,
          alias: %PgQuery.Alias{
            aliasname: aliasname
          },
          location: location
-       }),
-       do: %{
-         schema: if(schemaname == "", do: nil, else: schemaname),
-         relation: relname,
-         alias: aliasname,
-         location: location
-       }
-
-  defp rvar_to_alias_value(_rvar), do: nil
-
-  defp collect_aliases(nil), do: %{}
-
-  defp collect_aliases(from_items) when is_list(from_items) do
-    Enum.reduce(from_items, %{}, fn
-      %PgQuery.Node{
-        node: {:range_var, %PgQuery.RangeVar{alias: %PgQuery.Alias{aliasname: name}} = rvar}
-      },
-      table_aliases ->
-        Map.put(table_aliases, name, rvar_to_alias_value(rvar))
-
-      %PgQuery.Node{node: {:join_expr, join}}, table_aliases ->
-        table_aliases
-        |> collect_join_aliases(join)
-
-      _other, table_aliases ->
-        table_aliases
-    end)
+       }) do
+    Map.put(aliases, aliasname, %{
+      schema: if(schemaname == "", do: nil, else: schemaname),
+      relation: relname,
+      alias: aliasname,
+      location: location
+    })
   end
 
-  defp collect_join_aliases(table_aliases, %PgQuery.JoinExpr{} = join) do
-    table_aliases
+  defp collect_rvar_aliases(aliases, _rvar), do: aliases
+
+  defp collect_join_aliases(aliases, %PgQuery.JoinExpr{} = join) do
+    aliases
     |> collect_from_node(join.larg)
     |> collect_from_node(join.rarg)
   end
 
-  defp collect_from_node(table_aliases, %PgQuery.Node{node: {:range_var, rvar}}) do
-    case rvar.alias do
-      %PgQuery.Alias{aliasname: name} -> Map.put(table_aliases, name, rvar_to_alias_value(rvar))
-      nil -> table_aliases
-    end
+  defp collect_from_node(aliases, %PgQuery.Node{node: {:range_var, rvar}}) do
+    collect_rvar_aliases(aliases, rvar)
   end
 
-  defp collect_from_node(table_aliases, %PgQuery.Node{node: {:join_expr, join}}) do
-    collect_join_aliases(table_aliases, join)
+  defp collect_from_node(aliases, %PgQuery.Node{node: {:join_expr, join}}) do
+    collect_join_aliases(aliases, join)
   end
 
-  defp collect_from_node(table_aliases, _), do: table_aliases
+  defp collect_from_node(aliases, _), do: aliases
 end
