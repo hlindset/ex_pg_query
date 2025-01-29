@@ -19,8 +19,7 @@ defmodule ExPgQuery.Parser do
   def parse(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
          {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
-      # |> dbg()
-      nodes = NodeTraversal.nodes(protobuf) |> dbg()
+      nodes = NodeTraversal.nodes(protobuf) # |> dbg(limit: :infinity, printable_limit: :infinity)
       initial_result = %Result{protobuf: protobuf}
 
       # find all CTEs first, so we can compare table names to CTE names
@@ -36,11 +35,6 @@ defmodule ExPgQuery.Parser do
               acc
           end
         end)
-
-      Enum.each(nodes, fn
-        {%PgQuery.ColumnRef{} = node, %Ctx{join_clause_condition: true}} -> IO.inspect(node, limit: :infinity, printable_limit: :infinity, label: :nnn)
-        _ -> nil
-      end)
 
       result =
         Enum.reduce(nodes, cte_results, fn node, acc ->
