@@ -17,8 +17,8 @@ defmodule ExPgQuery.Parser3Test do
 
     test "parses ALTER INDEX" do
       {:ok, result} = Parser.parse("ALTER INDEX my_index_name SET (fastupdate = on)")
-      assert_tables_eq(result, [])
-      assert_ddl_tables_eq(result, [])
+      assert_tables_eq(result, ["my_index_name"])
+      assert_ddl_tables_eq(result, ["my_index_name"])
     end
 
     test "parses SET" do
@@ -34,6 +34,7 @@ defmodule ExPgQuery.Parser3Test do
     test "parses COPY" do
       {:ok, result} = Parser.parse("COPY test (id) TO stdout")
       assert_tables_eq(result, ["test"])
+      assert_select_tables_eq(result, ["test"])
     end
 
     test "parses DROP TABLE" do
@@ -70,6 +71,7 @@ defmodule ExPgQuery.Parser3Test do
     test "parses LOCK" do
       {:ok, result} = Parser.parse("LOCK TABLE public.schema_migrations IN ACCESS SHARE MODE")
       assert_tables_eq(result, ["public.schema_migrations"])
+      assert_select_tables_eq(result, ["public.schema_migrations"])
     end
 
     test "parses CREATE TABLE" do
@@ -116,8 +118,7 @@ defmodule ExPgQuery.Parser3Test do
     end
 
     test "parses CREATE RULE" do
-      {:ok, result} = Parser.parse("CREATE RULE shoe_ins_protect AS ON INSERT TO shoe
-                           DO INSTEAD NOTHING")
+      {:ok, result} = Parser.parse("CREATE RULE shoe_ins_protect AS ON INSERT TO shoe DO INSTEAD NOTHING")
       assert_tables_eq(result, ["shoe"])
     end
 
@@ -131,6 +132,7 @@ defmodule ExPgQuery.Parser3Test do
         """)
 
       assert_tables_eq(result, ["accounts"])
+      assert_ddl_tables_eq(result, ["accounts"])
     end
 
     test "parses DROP SCHEMA" do
@@ -144,6 +146,7 @@ defmodule ExPgQuery.Parser3Test do
       # considered to be "tables" in DROP statements, while they are considered
       # to be tables in CREATE statements. we consider them to be tables in both.
       assert_tables_eq(result, ["myview", "myview2"])
+      assert_ddl_tables_eq(result, ["myview", "myview2"])
     end
 
     test "parses DROP INDEX" do
@@ -154,11 +157,13 @@ defmodule ExPgQuery.Parser3Test do
     test "parses DROP RULE" do
       {:ok, result} = Parser.parse("DROP RULE myrule ON mytable CASCADE")
       assert_tables_eq(result, ["mytable"])
+      assert_ddl_tables_eq(result, ["mytable"])
     end
 
     test "parses DROP TRIGGER" do
       {:ok, result} = Parser.parse("DROP TRIGGER IF EXISTS mytrigger ON mytable RESTRICT")
       assert_tables_eq(result, ["mytable"])
+      assert_ddl_tables_eq(result, ["mytable"])
     end
 
     test "parses GRANT" do
@@ -176,7 +181,6 @@ defmodule ExPgQuery.Parser3Test do
       {:ok, result} = Parser.parse(~s|TRUNCATE bigtable, "fattable" RESTART IDENTITY|)
       assert_tables_eq(result, ["bigtable", "fattable"])
       assert_ddl_tables_eq(result, ["bigtable", "fattable"])
-
       assert_raw_tables_eq(result, [
         %{
           inh: true,
@@ -204,6 +208,7 @@ defmodule ExPgQuery.Parser3Test do
         Parser.parse("WITH a AS (SELECT * FROM x WHERE x.y = $1 AND x.z = 1) SELECT * FROM a")
 
       assert_tables_eq(result, ["x"])
+      assert_select_tables_eq(result, ["x"])
       assert_cte_names_eq(result, ["a"])
     end
 
@@ -683,6 +688,7 @@ defmodule ExPgQuery.Parser3Test do
         """)
 
       assert_tables_eq(result, ["users"])
+      assert_dml_tables_eq(result, ["users"])
     end
 
     test "finds tables in being selected from for insert" do
@@ -740,6 +746,8 @@ defmodule ExPgQuery.Parser3Test do
 
       # xxx: match_array
       assert_tables_eq(result, ["users", "other_users"])
+      assert_select_tables_eq(result, ["other_users"])
+      assert_dml_tables_eq(result, ["users"])
     end
 
     test "finds tables referenced in the FROM clause" do
@@ -791,6 +799,22 @@ defmodule ExPgQuery.Parser3Test do
       assert_tables_eq(result, ["users", "foo"])
       assert_dml_tables_eq(result, ["users"])
       assert_select_tables_eq(result, ["foo"])
+    end
+
+    test "finds tables in a CTE" do
+      {:ok, result} =
+        Parser.parse("""
+          with cte as (
+            select pk from other_users
+          )
+          delete from users
+          where users.pk in (select pk from cte);
+        """)
+
+      # xxx: match_array
+      assert_tables_eq(result, ["users", "other_users"])
+      assert_select_tables_eq(result, ["other_users"])
+      assert_dml_tables_eq(result, ["users"])
     end
   end
 

@@ -25,7 +25,7 @@ defmodule ExPgQuery.NodeTraversal do
     """
     @type stmt_type :: :none | :select | :dml | :ddl | :call
 
-    defstruct type: nil,
+    defstruct type: :none,
               has_filter: false,
               current_cte: nil,
               is_recursive_cte: false,
@@ -88,7 +88,10 @@ defmodule ExPgQuery.NodeTraversal do
     [{node, updated_ctx} | children]
   end
 
+  #
   # Updates context based on the type of node being processed
+  #
+
   defp ctx_for_node(%PgQuery.SelectStmt{} = select_stmt, ctx) do
     table_aliases = collect_aliases(select_stmt.from_clause)
     cte_names = collect_cte_names(select_stmt.with_clause)
@@ -102,6 +105,11 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp ctx_for_node(%PgQuery.UpdateStmt{} = update_stmt, ctx) do
     cte_names = collect_cte_names(update_stmt.with_clause)
+    %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
+  end
+
+  defp ctx_for_node(%PgQuery.DeleteStmt{} = delete_stmt, ctx) do
+    cte_names = collect_cte_names(delete_stmt.with_clause)
     %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
   end
 
@@ -131,18 +139,99 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp ctx_for_node(_node, ctx), do: ctx
 
+  #
   # Updates context based on specific fields within nodes
+  #
+
+  # SELECT
   defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx)
        when field in [:target_list, :where_clause, :sort_clause, :group_clause, :having_clause],
        do: %Ctx{ctx | subselect_item: true}
 
-  defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx)
-       when field in [:into_clause],
-       do: %Ctx{ctx | type: :ddl}
+  defp ctx_for_field(%PgQuery.SelectStmt{}, :into_clause, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
-  defp ctx_for_field(%PgQuery.JoinExpr{}, field, ctx) when field in [:quals],
+  defp ctx_for_field(%PgQuery.SelectStmt{}, :from_clause, ctx),
+    do: %Ctx{ctx | type: :select, from_clause_item: true}
+
+  # DELETE
+  defp ctx_for_field(%PgQuery.DeleteStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :dml, from_clause_item: true}
+
+  defp ctx_for_field(%PgQuery.DeleteStmt{}, :using_clause, ctx),
+    do: %Ctx{ctx | type: :select, from_clause_item: true}
+
+  # UPDATE
+  defp ctx_for_field(%PgQuery.UpdateStmt{}, :from_clause, ctx),
+    do: %Ctx{ctx | type: :select, from_clause_item: true}
+
+  defp ctx_for_field(%PgQuery.UpdateStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :dml, from_clause_item: true}
+
+  # INSERT
+  defp ctx_for_field(%PgQuery.InsertStmt{}, :from_clause, ctx),
+    do: %Ctx{ctx | type: :select, from_clause_item: true}
+
+  defp ctx_for_field(%PgQuery.InsertStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :dml, from_clause_item: true}
+
+  # CREATE TABLE
+  defp ctx_for_field(%PgQuery.CreateStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # CREATE TABLE ... AS
+  defp ctx_for_field(%PgQuery.CreateTableAsStmt{}, :into, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # ALTER TABLE
+  defp ctx_for_field(%PgQuery.AlterTableStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # COPY
+  defp ctx_for_field(%PgQuery.CopyStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :select, from_clause_item: true}
+
+  # CREATE RULE
+  defp ctx_for_field(%PgQuery.RuleStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # GRANT
+  defp ctx_for_field(%PgQuery.GrantStmt{objtype: :OBJECT_TABLE}, :objects, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # TRUNCATE
+  defp ctx_for_field(%PgQuery.TruncateStmt{}, :relations, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # VACUUM
+  defp ctx_for_field(%PgQuery.VacuumStmt{}, :rels, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # CREATE VIEW
+  defp ctx_for_field(%PgQuery.ViewStmt{}, :view, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # REFRESH MATERIALIZED VIEW
+  defp ctx_for_field(%PgQuery.RefreshMatViewStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # CREATE TRIGGER
+  defp ctx_for_field(%PgQuery.CreateTrigStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # CREATE INDEX
+  defp ctx_for_field(%PgQuery.IndexStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+
+  # LOCK TABLE
+  defp ctx_for_field(%PgQuery.LockStmt{}, :relations, ctx),
+    do: %Ctx{ctx | type: :select, from_clause_item: true}
+
+  # JOIN
+  defp ctx_for_field(%PgQuery.JoinExpr{}, :quals, ctx),
     do: %Ctx{ctx | join_clause_condition: true}
 
+  # noop fallback
   defp ctx_for_field(_node, _field, ctx),
     do: ctx
 

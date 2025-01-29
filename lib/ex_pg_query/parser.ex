@@ -40,7 +40,7 @@ defmodule ExPgQuery.Parser do
                   cte_names: acc.cte_names ++ ctx.cte_names
               }
 
-            {%PgQuery.RangeVar{} = node, %Ctx{type: type} = ctx} ->
+            {%PgQuery.RangeVar{} = node, %Ctx{type: type, from_clause_item: true} = ctx} ->
               table_name =
                 case node do
                   %PgQuery.RangeVar{schemaname: "", relname: relname} ->
@@ -115,7 +115,7 @@ defmodule ExPgQuery.Parser do
 
                 rt when rt in [:OBJECT_RULE, :OBJECT_TRIGGER] ->
                   Enum.reduce(objects, acc, fn obj, acc ->
-                    name = Enum.slice(obj, 0..-2//-1) |> Enum.join(".")
+                    name = Enum.slice(obj, 0..-2//1) |> Enum.join(".")
                     table = %{name: name, type: type}
                     %Result{acc | tables: [table | acc.tables]}
                   end)
