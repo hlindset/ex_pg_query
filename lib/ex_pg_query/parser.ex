@@ -19,7 +19,7 @@ defmodule ExPgQuery.Parser do
   def parse(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
          {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
-      nodes = NodeTraversal.nodes(protobuf)
+      nodes = NodeTraversal.nodes(protobuf) # |> dbg(limit: :infinity, printable_limit: :infinity)
       initial_result = %Result{protobuf: protobuf}
 
       result =
@@ -96,7 +96,7 @@ defmodule ExPgQuery.Parser do
             # subselect items
             #
 
-            {%PgQuery.ColumnRef{} = node, %Ctx{subselect_item: true}} ->
+            {%PgQuery.ColumnRef{} = node, %Ctx{table_aliases: aliases, condition_item: true}} ->
               field =
                 node.fields
                 |> Enum.filter(fn %PgQuery.Node{node: {type, _}} -> type == :string end)
@@ -106,7 +106,11 @@ defmodule ExPgQuery.Parser do
 
               field =
                 case field do
-                  [tbl, fld] -> {tbl, fld}
+                  [tbl, fld] ->
+                    case Map.get(aliases, tbl) do
+                      nil -> {tbl, fld}
+                      alias -> {alias_to_name(alias), fld}
+                    end
                   [fld] -> {nil, fld}
                   _ -> nil
                 end
@@ -215,6 +219,9 @@ defmodule ExPgQuery.Parser do
        }}
     end
   end
+
+  defp alias_to_name(%{relation: relation, schema: nil}), do: relation
+  defp alias_to_name(%{relation: relation, schema: schema}), do: "#{schema}.#{relation}"
 
   def tables(%Result{tables: tables}),
     do: Enum.map(tables, & &1.name) |> Enum.uniq()

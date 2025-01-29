@@ -23,8 +23,7 @@ defmodule ExPgQuery.NodeTraversal do
               is_recursive_cte: false,
               subselect_item: false,
               from_clause_item: false,
-              join_clause_condition: false,
-              where_condition: false,
+              condition_item: false,
               table_aliases: %{},
               cte_names: []
   end
@@ -86,9 +85,20 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp ctx_for_node(%PgQuery.SelectStmt{} = select_stmt, ctx) do
     table_aliases = collect_aliases(select_stmt.from_clause)
+
+    final_aliases = case ctx do
+      # in case of subqueries - merge into previous aliases
+      %Ctx{subselect_item: true} -> Map.merge(ctx.table_aliases, table_aliases)
+      _ -> table_aliases
+    end
+
     cte_names = collect_cte_names(select_stmt.with_clause)
-    %Ctx{ctx | type: :select, table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
+    %Ctx{ctx | type: :select, table_aliases: final_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
+
+  # SubLink (subqueries)
+  defp ctx_for_node(%PgQuery.SubLink{}, ctx),
+    do: %Ctx{ctx | subselect_item: true}
 
   defp ctx_for_node(%PgQuery.InsertStmt{} = insert_stmt, ctx) do
     cte_names = collect_cte_names(insert_stmt.with_clause)
@@ -139,10 +149,8 @@ defmodule ExPgQuery.NodeTraversal do
   # Updates context based on specific fields within nodes
   #
 
-  # SELECT
-  defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx)
-       when field in [:target_list, :where_clause, :sort_clause, :group_clause, :having_clause],
-       do: %Ctx{ctx | subselect_item: true}
+  defp ctx_for_field(%PgQuery.SelectStmt{}, :where_clause, ctx),
+    do: %Ctx{ctx | condition_item: true}
 
   defp ctx_for_field(%PgQuery.SelectStmt{}, :into_clause, ctx),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
@@ -151,6 +159,9 @@ defmodule ExPgQuery.NodeTraversal do
     do: %Ctx{ctx | type: :select, from_clause_item: true}
 
   # DELETE
+  defp ctx_for_field(%PgQuery.DeleteStmt{}, :where_clause, ctx),
+    do: %Ctx{ctx | type: :select, condition_item: true}
+
   defp ctx_for_field(%PgQuery.DeleteStmt{}, :relation, ctx),
     do: %Ctx{ctx | type: :dml, from_clause_item: true}
 
@@ -158,6 +169,9 @@ defmodule ExPgQuery.NodeTraversal do
     do: %Ctx{ctx | type: :select, from_clause_item: true}
 
   # UPDATE
+  defp ctx_for_field(%PgQuery.UpdateStmt{}, :where_clause, ctx),
+    do: %Ctx{ctx | type: :select, condition_item: true}
+
   defp ctx_for_field(%PgQuery.UpdateStmt{}, :from_clause, ctx),
     do: %Ctx{ctx | type: :select, from_clause_item: true}
 
@@ -216,6 +230,9 @@ defmodule ExPgQuery.NodeTraversal do
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # CREATE INDEX
+  defp ctx_for_field(%PgQuery.IndexStmt{}, :where_clause, ctx),
+    do: %Ctx{ctx | type: :select, condition_item: true}
+
   defp ctx_for_field(%PgQuery.IndexStmt{}, :relation, ctx),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
@@ -225,7 +242,7 @@ defmodule ExPgQuery.NodeTraversal do
 
   # JOIN
   defp ctx_for_field(%PgQuery.JoinExpr{}, :quals, ctx),
-    do: %Ctx{ctx | join_clause_condition: true}
+    do: %Ctx{ctx | condition_item: true}
 
   # noop fallback
   defp ctx_for_field(_node, _field, ctx),

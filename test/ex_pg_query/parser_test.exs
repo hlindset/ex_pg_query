@@ -564,12 +564,12 @@ defmodule ExPgQuery.ParserTest do
       expected_filters =
         Enum.sort([
           {nil, "id"},
-          {"u", "created_at"},
-          {"u", "id"},
-          {"u", "org_id"},
-          {"u", "status"},
-          {"ur", "role"},
-          {"ur", "user_id"},
+          {"users", "created_at"},
+          {"users", "id"},
+          {"users", "org_id"},
+          {"users", "status"},
+          {"user_roles", "role"},
+          {"user_roles", "user_id"},
           {nil, "tier"}
         ])
 
@@ -619,7 +619,7 @@ defmodule ExPgQuery.ParserTest do
         Enum.sort([
           {nil, "id"},
           {nil, "tier"},
-          {"u", "org_id"}
+          {"users", "org_id"}
         ])
 
       assert Enum.sort(result.filter_columns) == expected_filters
@@ -1043,7 +1043,7 @@ defmodule ExPgQuery.ParserTest do
       assert tables_eq(result, ["test"])
       assert ddl_tables_eq(result, ["test"])
       assert call_functions_eq(result, ["lower", "upper", "pow"])
-      assert filter_columns_eq(result, [[nil, "a"]])
+      assert filter_columns_eq(result, [{nil, "a"}])
     end
 
     test "parses CREATE INDEX statements" do

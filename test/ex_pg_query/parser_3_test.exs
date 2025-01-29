@@ -331,7 +331,16 @@ defmodule ExPgQuery.Parser3Test do
     test "correctly finds tables in a select that has sub-selects without from clause" do
       {:ok, result} =
         Parser.parse(
-          "SELECT * FROM pg_catalog.pg_class c JOIN (SELECT 17650 AS oid UNION ALL SELECT 17663 AS oid) vals ON c.oid = vals.oid"
+          """
+          SELECT *
+          FROM pg_catalog.pg_class c
+          JOIN (
+            SELECT 17650 AS oid
+            UNION ALL
+            SELECT 17663 AS oid
+          ) vals
+          ON c.oid = vals.oid
+          """
         )
 
       assert_tables_eq(result, ["pg_catalog.pg_class"])
