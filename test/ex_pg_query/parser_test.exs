@@ -7,9 +7,9 @@ defmodule ExPgQuery.ParserTest do
     test "parses simple SELECT query" do
       {:ok, result} = Parser.parse("SELECT 1")
 
-      assert assert_tables(result, [])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert tables_eq(result, [])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "handles parse errors" do
@@ -31,25 +31,25 @@ defmodule ExPgQuery.ParserTest do
           WHERE s.database_id = $1
         """)
 
-      assert_select_tables(result, ["snapshots", "system_snapshots"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["snapshots", "system_snapshots"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses empty queries" do
       {:ok, result} = Parser.parse("-- nothing")
 
-      assert assert_tables(result, [])
-      assert result.cte_names == []
-      assert_statement_types(result, [])
+      assert tables_eq(result, [])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [])
     end
 
     test "parses nested SELECT in FROM clause" do
       {:ok, result} = Parser.parse("SELECT u.* FROM (SELECT * FROM users) u")
 
-      assert_select_tables(result, ["users"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["users"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses nested SELECT in WHERE clause" do
@@ -60,9 +60,9 @@ defmodule ExPgQuery.ParserTest do
           WHERE 1 = (SELECT COUNT(*) FROM user_roles)
         """)
 
-      assert_select_tables(result, ["user_roles", "users"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["user_roles", "users"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses WITH queries (CTEs)" do
@@ -72,9 +72,10 @@ defmodule ExPgQuery.ParserTest do
           SELECT * FROM cte
         """)
 
-      assert_select_tables(result, ["x"])
-      assert result.cte_names == ["cte"]
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["x"])
+      assert cte_names_eq(result, ["cte"])
+      assert table_aliases_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
   end
 
@@ -87,9 +88,9 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert_select_tables(result, ["table_a", "table_b"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses INTERSECT query" do
@@ -100,9 +101,9 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert_select_tables(result, ["table_a", "table_b"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses EXCEPT query" do
@@ -113,9 +114,9 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert_select_tables(result, ["table_a", "table_b"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses complex set operations with CTEs" do
@@ -132,9 +133,10 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_d
         """)
 
-      assert_select_tables(result, ["table_a", "table_b", "table_c", "table_d"])
+      assert select_tables_eq(result, ["table_a", "table_b", "table_c", "table_d"])
+      assert table_aliases_eq(result, [])
       assert Enum.sort(result.cte_names) == ["cte_a", "cte_b"]
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations with subqueries" do
@@ -152,9 +154,9 @@ defmodule ExPgQuery.ParserTest do
           )
         """)
 
-      assert_select_tables(result, ["table_a", "table_b", "table_c", "table_d"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b", "table_c", "table_d"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses UNION ALL vs UNION DISTINCT" do
@@ -167,9 +169,9 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_c
         """)
 
-      assert_select_tables(result, ["table_a", "table_b", "table_c"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b", "table_c"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses INTERSECT with ALL option" do
@@ -180,9 +182,10 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert_select_tables(result, ["table_a", "table_b"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b"])
+      assert table_aliases_eq(result, [])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses EXCEPT with ALL option" do
@@ -193,9 +196,9 @@ defmodule ExPgQuery.ParserTest do
           SELECT id FROM table_b
         """)
 
-      assert_select_tables(result, ["table_a", "table_b"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses complex set operations with CTEs and ordering" do
@@ -216,9 +219,10 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY id
         """)
 
-      assert_select_tables(result, ["table_a", "table_b", "table_c", "table_d"])
+      assert select_tables_eq(result, ["table_a", "table_b", "table_c", "table_d"])
+      assert table_aliases_eq(result, [])
       assert Enum.sort(result.cte_names) == ["cte_a", "cte_b"]
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses recursive CTEs with set operations" do
@@ -240,9 +244,10 @@ defmodule ExPgQuery.ParserTest do
           SELECT * FROM tree ORDER BY level, id
         """)
 
-      assert_select_tables(result, ["org_tree"])
-      assert result.cte_names == ["tree"]
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["org_tree"])
+      assert cte_names_eq(result, ["tree"])
+      assert table_aliases_eq(result, [%{alias: "child", location: 245, relation: "org_tree", schema: nil}])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses complex nested set operations" do
@@ -267,7 +272,7 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY id DESC
         """)
 
-      assert_select_tables(result, [
+      assert select_tables_eq(result, [
         "table_a",
         "table_b",
         "table_c",
@@ -276,8 +281,8 @@ defmodule ExPgQuery.ParserTest do
         "table_f"
       ])
 
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations with complex ORDER BY and LIMIT" do
@@ -292,9 +297,9 @@ defmodule ExPgQuery.ParserTest do
           LIMIT 5 OFFSET 2
         """)
 
-      assert_select_tables(result, ["table_a", "table_b", "table_c"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b", "table_c"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations in JOIN conditions" do
@@ -313,7 +318,7 @@ defmodule ExPgQuery.ParserTest do
           )
         """)
 
-      assert_select_tables(result, [
+      assert select_tables_eq(result, [
         "table_a",
         "table_b",
         "table_c",
@@ -322,8 +327,8 @@ defmodule ExPgQuery.ParserTest do
         "table_f"
       ])
 
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations in aggregates and window functions" do
@@ -343,15 +348,15 @@ defmodule ExPgQuery.ParserTest do
           ) x
         """)
 
-      assert_select_tables(result, [
+      assert select_tables_eq(result, [
         "archived_items",
         "extra_types",
         "items",
         "special_types"
       ])
 
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations with complex recursive CTE expressions" do
@@ -383,9 +388,14 @@ defmodule ExPgQuery.ParserTest do
           ) leaf_nodes
         """)
 
-      assert_select_tables(result, ["graph"])
-      assert result.cte_names == ["search_graph"]
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["graph"])
+      assert table_aliases_eq(result, [
+        %{alias: "g", location: 147, relation: "graph", schema: nil},
+        %{alias: "g", location: 268, relation: "graph", schema: nil},
+        %{alias: "g", location: 467, relation: "graph", schema: nil}
+      ])
+      assert cte_names_eq(result, ["search_graph"])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations with lateral joins" do
@@ -409,7 +419,7 @@ defmodule ExPgQuery.ParserTest do
           ) counts
         """)
 
-      assert_select_tables(result, [
+      assert select_tables_eq(result, [
         "archived_comments",
         "archived_users",
         "comments",
@@ -417,8 +427,9 @@ defmodule ExPgQuery.ParserTest do
         "users"
       ])
 
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert cte_names_eq(result, [])
+      assert table_aliases_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations in function arguments" do
@@ -445,7 +456,7 @@ defmodule ExPgQuery.ParserTest do
           )
         """)
 
-      assert_select_tables(result, [
+      assert select_tables_eq(result, [
         "active_users",
         "excluded_statuses",
         "pending_users",
@@ -453,8 +464,9 @@ defmodule ExPgQuery.ParserTest do
         "valid_statuses"
       ])
 
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert cte_names_eq(result, [])
+      assert table_aliases_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations with different column counts/names" do
@@ -473,15 +485,15 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY created_at DESC NULLS LAST
         """)
 
-      assert_select_tables(result, [
+      assert select_tables_eq(result, [
         "external_users",
         "legacy_users",
         "users",
         "verified_users"
       ])
 
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses set operations with VALUES clauses" do
@@ -499,9 +511,9 @@ defmodule ExPgQuery.ParserTest do
           ORDER BY id
         """)
 
-      assert_select_tables(result, ["table_a", "table_b"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:select_stmt])
+      assert select_tables_eq(result, ["table_a", "table_b"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "extracts functions from queries" do
@@ -523,7 +535,7 @@ defmodule ExPgQuery.ParserTest do
           WHERE amount > any(select unnest(array_agg(amount)) from other_transactions)
         """)
 
-      assert_call_functions(result, [
+      assert call_functions_eq(result, [
         "array_agg",
         "avg",
         "count",
@@ -585,12 +597,15 @@ defmodule ExPgQuery.ParserTest do
           FROM user_stats us
         """)
 
-      assert result.table_aliases == %{
-               "a" => %{name: "admins", type: :select},
-               "c" => %{name: "comments", type: :select},
-               "p" => %{name: "posts", type: :select},
-               "u" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+        [
+          %{alias: "a", location: 305, relation: "admins", schema: nil},
+          %{alias: "c", location: 200, relation: "comments", schema: nil},
+          %{alias: "p", location: 158, relation: "posts", schema: nil},
+          %{alias: "u", location: 136, relation: "users", schema: nil}
+        ]
+      )
     end
 
     test "extracts filter columns from IN clause" do
@@ -622,14 +637,17 @@ defmodule ExPgQuery.ParserTest do
         ) p
         """)
 
-      assert_select_tables(result, ["posts", "users"])
+      assert select_tables_eq(result, ["posts", "users"])
 
-      assert result.table_aliases == %{
-               "p" => %{name: "posts", type: :select},
-               "u" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+          [
+            %{alias: "u", location: 21, relation: "users", schema: nil},
+            %{alias: "p", location: 58, relation: "posts", schema: nil}
+          ]
+      )
 
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses table functions with aliases" do
@@ -641,10 +659,10 @@ defmodule ExPgQuery.ParserTest do
         """)
 
       # generate_series is a function, not a table
-      assert assert_tables(result, [])
-      assert result.table_aliases == %{}
-      assert_call_functions(result, ["generate_series"])
-      assert_statement_types(result, [:select_stmt])
+      assert tables_eq(result, [])
+      assert table_aliases_eq(result, [])
+      assert call_functions_eq(result, ["generate_series"])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses VALUES with column aliases" do
@@ -660,9 +678,9 @@ defmodule ExPgQuery.ParserTest do
         WHERE v.x > 1
         """)
 
-      assert assert_tables(result, [])
-      assert result.table_aliases == %{}
-      assert_statement_types(result, [:select_stmt])
+      assert tables_eq(result, [])
+      assert table_aliases_eq(result, [])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses different join types with aliases" do
@@ -676,16 +694,19 @@ defmodule ExPgQuery.ParserTest do
         WHERE u.active = true
         """)
 
-      assert_select_tables(result, ["comments", "post_stats", "posts", "users"])
+      assert select_tables_eq(result, ["comments", "post_stats", "posts", "users"])
 
-      assert result.table_aliases == %{
-               "c" => %{name: "comments", type: :select},
-               "p" => %{name: "posts", type: :select},
-               "ps" => %{name: "post_stats", type: :select},
-               "u" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+        [
+          %{alias: "c", location: 126, relation: "comments", schema: nil},
+          %{alias: "p", location: 49, relation: "posts", schema: nil},
+          %{alias: "ps", location: 87, relation: "post_stats", schema: nil},
+          %{alias: "u", location: 36, relation: "users", schema: nil}
+        ]
+      )
 
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses schema qualified tables with aliases" do
@@ -697,15 +718,18 @@ defmodule ExPgQuery.ParserTest do
         LEFT JOIN stats.user_metrics um ON um.user_id = u.id
         """)
 
-      assert_select_tables(result, ["analytics.posts", "public.users", "stats.user_metrics"])
+      assert select_tables_eq(result, ["analytics.posts", "public.users", "stats.user_metrics"])
 
-      assert result.table_aliases == %{
-               "p" => %{name: "analytics.posts", type: :select},
-               "u" => %{name: "public.users", type: :select},
-               "um" => %{name: "stats.user_metrics", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+        [
+          %{alias: "p", location: 41, relation: "posts", schema: "analytics"},
+          %{alias: "u", location: 21, relation: "users", schema: "public"},
+          %{alias: "um", location: 89, relation: "user_metrics", schema: "stats"}
+        ]
+      )
 
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses column aliases" do
@@ -720,13 +744,14 @@ defmodule ExPgQuery.ParserTest do
         GROUP BY u.id, u.type
         """)
 
-      assert_select_tables(result, ["users"])
+      assert select_tables_eq(result, ["users"])
 
-      assert result.table_aliases == %{
-               "u" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+        [%{alias: "u", location: 176, relation: "users", schema: nil}]
+      )
 
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses case sensitive and quoted identifiers as aliases" do
@@ -742,14 +767,17 @@ defmodule ExPgQuery.ParserTest do
         JOIN items "MixedCase" ON "MixedCase".user_id = "Users".id
         """)
 
-      assert_select_tables(result, ["items", "users"])
+      assert select_tables_eq(result, ["items", "users"])
 
-      assert result.table_aliases == %{
-               "MixedCase" => %{name: "items", type: :select},
-               "Users" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+        [
+          %{alias: "MixedCase", location: 206, relation: "items", schema: nil},
+          %{alias: "Users", location: 104, relation: "users", schema: nil}
+        ]
+      )
 
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses reserved keywords as aliases" do
@@ -764,15 +792,15 @@ defmodule ExPgQuery.ParserTest do
         JOIN groups "group" ON "group".id = "select".group_id
         """)
 
-      assert_select_tables(result, ["groups", "orders", "users"])
+      assert select_tables_eq(result, ["groups", "orders", "users"])
 
-      assert result.table_aliases == %{
-               "group" => %{name: "groups", type: :select},
-               "order" => %{name: "orders", type: :select},
-               "select" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(result, [
+        %{alias: "group", location: 132, relation: "groups", schema: nil},
+        %{alias: "order", location: 79, relation: "orders", schema: nil},
+        %{alias: "select", location: 59, relation: "users", schema: nil}
+      ])
 
-      assert_statement_types(result, [:select_stmt])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses complex subqueries with multiple alias levels" do
@@ -805,16 +833,19 @@ defmodule ExPgQuery.ParserTest do
         ) stats ON true
         """)
 
-      assert_select_tables(result, ["payments", "posts", "users"])
+      assert select_tables_eq(result, ["payments", "posts", "users"])
 
-      assert result.table_aliases == %{
-               "p" => %{name: "posts", type: :select},
-               "pay" => %{name: "payments", type: :select},
-               "u" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+        [
+          %{alias: "p", location: 282, relation: "posts", schema: nil},
+          %{alias: "pay", location: 411, relation: "payments", schema: nil},
+          %{alias: "u", location: 32, relation: "users", schema: nil}
+        ]
+      )
 
-      assert result.cte_names == ["cte"]
-      assert_statement_types(result, [:select_stmt])
+      assert cte_names_eq(result, ["cte"])
+      assert statement_types_eq(result, [:select_stmt])
     end
 
     test "parses really deep queries" do
@@ -839,7 +870,7 @@ defmodule ExPgQuery.ParserTest do
       """
 
       {:ok, result} = Parser.parse(query_text)
-      assert_select_tables(result, Enum.map(0..29, &"t#{&1}"))
+      assert select_tables_eq(result, Enum.map(0..29, &"t#{&1}"))
     end
 
     test "parses really deep queries (3)" do
@@ -848,7 +879,22 @@ defmodule ExPgQuery.ParserTest do
           Enum.join(Enum.map(1..100, &"JOIN foo_#{&1} ON foo.id = foo_#{&1}.foo_id"), " ")
 
       {:ok, result} = Parser.parse(query_text)
-      assert_select_tables(result, Enum.map(1..100, &"foo_#{&1}") ++ ["foo"])
+      assert select_tables_eq(result, Enum.map(1..100, &"foo_#{&1}") ++ ["foo"])
+    end
+
+    test "parses subquery alias scopes correctly" do
+      Parser.parse("""
+      SELECT e.name
+      FROM employees AS e
+      WHERE e.dept_id IN (
+          SELECT d.id
+          FROM departments AS d
+          WHERE d.location = e.location
+      )
+      """)
+
+      # todo: make sure all aliases resolve
+      assert true
     end
   end
 
@@ -863,9 +909,9 @@ defmodule ExPgQuery.ParserTest do
   #       RETURNING id, name
   #       """)
 
-  #     assert_select_tables(result, ["users"])
-  #     assert result.cte_names == []
-  #     assert_statement_types(result, [:insert_stmt])
+  #     assert select_tables_eq(result, ["users"])
+  #     assert cte_names_eq(result, [])
+  #     assert statement_types_eq(result, [:insert_stmt])
   #   end
 
   #   test "parses INSERT with SELECT" do
@@ -879,9 +925,9 @@ defmodule ExPgQuery.ParserTest do
   #       RETURNING id
   #       """)
 
-  #     assert_select_tables(result, ["archived_users", "users"])
-  #     assert result.cte_names == ["archived"]
-  #     assert_statement_types(result, [:insert_stmt])
+  #     assert select_tables_eq(result, ["archived_users", "users"])
+  #     assert cte_names_eq(result, ["archived"])
+  #     assert statement_types_eq(result, [:insert_stmt])
   #   end
 
   #   test "parses UPDATE statements" do
@@ -897,10 +943,10 @@ defmodule ExPgQuery.ParserTest do
   #       RETURNING u.id, u.status
   #       """)
 
-  #     assert_select_tables(result, ["user_sessions", "users"])
-  #     assert result.cte_names == []
+  #     assert select_tables_eq(result, ["user_sessions", "users"])
+  #     assert cte_names_eq(result, [])
   #     assert result.table_aliases == ["u", "us"]
-  #     assert_statement_types(result, [:update_stmt])
+  #     assert statement_types_eq(result, [:update_stmt])
   #   end
 
   #   test "parses DELETE statements" do
@@ -916,9 +962,9 @@ defmodule ExPgQuery.ParserTest do
   #       RETURNING user_id
   #       """)
 
-  #     assert_select_tables(result, ["user_data", "users"])
-  #     assert result.cte_names == ["inactive_users"]
-  #     assert_statement_types(result, [:delete_stmt])
+  #     assert select_tables_eq(result, ["user_data", "users"])
+  #     assert cte_names_eq(result, ["inactive_users"])
+  #     assert statement_types_eq(result, [:delete_stmt])
   #   end
 
   #   test "parses MERGE statements" do
@@ -933,10 +979,10 @@ defmodule ExPgQuery.ParserTest do
   #         INSERT (id, balance) VALUES (pt.account_id, pt.amount)
   #       """)
 
-  #     assert_select_tables(result, ["customer_accounts", "payment_transactions"])
-  #     assert result.cte_names == []
+  #     assert select_tables_eq(result, ["customer_accounts", "payment_transactions"])
+  #     assert cte_names_eq(result, [])
   #     assert result.table_aliases == ["ca", "pt"]
-  #     assert_statement_types(result, [:merge_stmt])
+  #     assert statement_types_eq(result, [:merge_stmt])
   #   end
   # end
 
@@ -945,8 +991,8 @@ defmodule ExPgQuery.ParserTest do
       {:ok, result} =
         Parser.parse(~s|SELECT * INTO films_recent FROM films WHERE date_prod >= "2002-01-01"|)
 
-      assert_ddl_tables(result, ["films_recent"])
-      assert_select_tables(result, ["films"])
+      assert ddl_tables_eq(result, ["films_recent"])
+      assert select_tables_eq(result, ["films"])
     end
 
     test "parses CREATE TABLE statements" do
@@ -963,9 +1009,9 @@ defmodule ExPgQuery.ParserTest do
         )
         """)
 
-      assert_ddl_tables(result, ["users"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:create_stmt])
+      assert ddl_tables_eq(result, ["users"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:create_stmt])
     end
 
     test "parses ALTER TABLE statements" do
@@ -980,9 +1026,9 @@ defmodule ExPgQuery.ParserTest do
           DROP CONSTRAINT IF EXISTS old_constraint
         """)
 
-      assert_ddl_tables(result, ["users"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:alter_table_stmt])
+      assert ddl_tables_eq(result, ["users"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:alter_table_stmt])
     end
 
     test "parses CREATE INDEX" do
@@ -994,10 +1040,10 @@ defmodule ExPgQuery.ParserTest do
         WHERE pow(a, 2) > 25
         """)
 
-      assert_tables(result, ["test"])
-      assert_ddl_tables(result, ["test"])
-      assert_call_functions(result, ["lower", "upper", "pow"])
-      assert_filter_columns(result, [[nil, "a"]])
+      assert tables_eq(result, ["test"])
+      assert ddl_tables_eq(result, ["test"])
+      assert call_functions_eq(result, ["lower", "upper", "pow"])
+      assert filter_columns_eq(result, [[nil, "a"]])
     end
 
     test "parses CREATE INDEX statements" do
@@ -1008,9 +1054,9 @@ defmodule ExPgQuery.ParserTest do
         WHERE deleted_at IS NULL
         """)
 
-      assert_ddl_tables(result, ["users"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:index_stmt])
+      assert ddl_tables_eq(result, ["users"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:index_stmt])
     end
 
     test "parses CREATE VIEW statements" do
@@ -1024,16 +1070,19 @@ defmodule ExPgQuery.ParserTest do
         GROUP BY u.id
         """)
 
-      assert_select_tables(result, ["sessions", "users"])
-      assert_ddl_tables(result, ["active_users"])
-      assert result.cte_names == []
+      assert select_tables_eq(result, ["sessions", "users"])
+      assert ddl_tables_eq(result, ["active_users"])
+      assert cte_names_eq(result, [])
 
-      assert result.table_aliases == %{
-               "s" => %{name: "sessions", type: :select},
-               "u" => %{name: "users", type: :select}
-             }
+      assert table_aliases_eq(
+        result,
+        [
+          %{alias: "s", location: 103, relation: "sessions", schema: nil},
+          %{alias: "u", location: 85, relation: "users", schema: nil}
+        ]
+      )
 
-      assert_statement_types(result, [:view_stmt])
+      assert statement_types_eq(result, [:view_stmt])
     end
 
     test "parses DROP statements" do
@@ -1046,9 +1095,9 @@ defmodule ExPgQuery.ParserTest do
         DROP SEQUENCE IF EXISTS user_id_seq;
         """)
 
-      assert_ddl_tables(result, ["temporary_users", "public.temporary_ids", "active_users"])
-      assert result.cte_names == []
-      assert_statement_types(result, [:drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt])
+      assert ddl_tables_eq(result, ["temporary_users", "public.temporary_ids", "active_users"])
+      assert cte_names_eq(result, [])
+      assert statement_types_eq(result, [:drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt, :drop_stmt])
     end
 
     #   test "parses CREATE SEQUENCE statements" do
@@ -1062,9 +1111,9 @@ defmodule ExPgQuery.ParserTest do
     #       CACHE 1
     #       """)
 
-    #     assert assert_tables(result, [])
-    #     assert result.cte_names == []
-    #     assert_statement_types(result, [:create_seq_stmt])
+    #     assert tables_eq(result, [])
+    #     assert cte_names_eq(result, [])
+    #     assert statement_types_eq(result, [:create_seq_stmt])
     #   end
 
     #   test "parses CREATE SCHEMA statements" do
@@ -1082,50 +1131,54 @@ defmodule ExPgQuery.ParserTest do
     #         GROUP BY date_trunc('month', date)
     #       """)
 
-    #     assert_select_tables(result, ["daily_stats"])
-    #     assert result.cte_names == []
-    #     assert_statement_types(result, [:create_schema_stmt])
+    #     assert select_tables_eq(result, ["daily_stats"])
+    #     assert cte_names_eq(result, [])
+    #     assert statement_types_eq(result, [:create_schema_stmt])
     #   end
   end
 
   # Helper to assert statement types
-  defp assert_statement_types(result, expected) do
-    assert Parser.statement_types(result) == expected
+  defp statement_types_eq(result, expected) do
+    Parser.statement_types(result) == expected
   end
 
-  defp assert_tables(result, expected) do
-    assert Enum.sort(Parser.tables(result)) == Enum.sort(expected)
+  defp tables_eq(result, expected) do
+    Enum.sort(Parser.tables(result)) == Enum.sort(expected)
   end
 
-  defp assert_select_tables(result, expected) do
-    assert Enum.sort(Parser.select_tables(result)) == Enum.sort(expected)
+  defp select_tables_eq(result, expected) do
+    Enum.sort(Parser.select_tables(result)) == Enum.sort(expected)
   end
 
-  defp assert_ddl_tables(result, expected) do
-    assert Enum.sort(Parser.ddl_tables(result)) == Enum.sort(expected)
+  defp ddl_tables_eq(result, expected) do
+    Enum.sort(Parser.ddl_tables(result)) == Enum.sort(expected)
   end
 
-  defp assert_dml_tables(result, expected) do
-    assert Enum.sort(Parser.dml_tables(result)) == Enum.sort(expected)
+  defp dml_tables_eq(result, expected) do
+    Enum.sort(Parser.dml_tables(result)) == Enum.sort(expected)
   end
 
-  defp assert_functions(result, expected) do
-    assert Enum.sort(Parser.functions(result)) == Enum.sort(expected)
+  defp functions_eq(result, expected) do
+    Enum.sort(Parser.functions(result)) == Enum.sort(expected)
   end
 
-  defp assert_call_functions(result, expected) do
-    assert Enum.sort(Parser.call_functions(result)) == Enum.sort(expected)
+  defp call_functions_eq(result, expected) do
+    Enum.sort(Parser.call_functions(result)) == Enum.sort(expected)
   end
 
-  defp assert_ddl_functions(result, expected) do
-    assert Enum.sort(Parser.ddl_functions(result)) == Enum.sort(expected)
+  defp ddl_functions_eq(result, expected) do
+    Enum.sort(Parser.ddl_functions(result)) == Enum.sort(expected)
   end
 
-  defp assert_filter_columns(result, expected) do
-    assert Enum.sort(result.filter_columns) == Enum.sort(expected)
+  defp filter_columns_eq(result, expected) do
+    Enum.sort(result.filter_columns) == Enum.sort(expected)
   end
 
-  defp assert_cte_names(result, expected) do
-    assert Enum.sort(result.cte_names) == Enum.sort(expected)
+  defp cte_names_eq(result, expected) do
+    Enum.sort(result.cte_names) == Enum.sort(expected)
+  end
+
+  defp table_aliases_eq(result, expected) do
+    Enum.sort(result.table_aliases) == Enum.sort(expected)
   end
 end

@@ -10,7 +10,7 @@ defmodule ExPgQuery.Parser do
   defmodule Result do
     defstruct protobuf: nil,
               tables: [],
-              table_aliases: %{},
+              table_aliases: [],
               cte_names: [],
               functions: [],
               filter_columns: []
@@ -39,6 +39,9 @@ defmodule ExPgQuery.Parser do
       result =
         Enum.reduce(nodes, cte_results, fn node, acc ->
           case node do
+            {%PgQuery.SelectStmt{}, %Ctx{} = ctx} ->
+              %Result{acc | table_aliases: acc.table_aliases ++ Map.values(ctx.table_aliases)}
+
             {%PgQuery.RangeVar{} = node, %Ctx{type: type} = ctx} ->
               table_name =
                 case node do
@@ -74,22 +77,22 @@ defmodule ExPgQuery.Parser do
                     relpersistence: node.relpersistence
                   }
 
-                  result = %Result{acc | tables: [table | acc.tables]}
+                  %Result{acc | tables: [table | acc.tables], table_aliases: acc.table_aliases ++ Map.values(ctx.table_aliases)}
 
-                  # if there's an alias, store it
-                  case node.alias do
-                    %PgQuery.Alias{aliasname: aliasname} ->
-                      %Result{
-                        result
-                        | table_aliases:
-                            Map.merge(result.table_aliases, %{
-                              aliasname => %{name: table_name, type: type}
-                            })
-                      }
+                  # # if there's an alias, store it
+                  # case node.alias do
+                  #   %PgQuery.Alias{aliasname: aliasname} ->
+                  #     %Result{
+                  #       result
+                  #       | table_aliases:
+                  #           Map.merge(result.table_aliases, %{
+                  #             aliasname => %{name: table_name, type: type}
+                  #           })
+                  #     }
 
-                    nil ->
-                      result
-                  end
+                  #   nil ->
+                  #     result
+                  # end
               end
 
             {%PgQuery.DropStmt{remove_type: remove_type} = node, %Ctx{type: type} = ctx} ->
@@ -153,7 +156,7 @@ defmodule ExPgQuery.Parser do
             # both from clause items and subselect items
             #
 
-            {%PgQuery.FuncCall{} = node, %Ctx{} = ctx} ->
+            {%PgQuery.FuncCall{} = node, _ctx} ->
               function =
                 node.funcname
                 |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
@@ -174,7 +177,7 @@ defmodule ExPgQuery.Parser do
          | tables: Enum.uniq(result.tables),
            cte_names: Enum.uniq(result.cte_names),
            functions: Enum.uniq(result.functions),
-           table_aliases: result.table_aliases,
+           table_aliases: Enum.uniq(result.table_aliases),
            filter_columns: Enum.uniq(result.filter_columns)
        }}
     end

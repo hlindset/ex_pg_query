@@ -22,23 +22,10 @@ defmodule ExPgQuery.Truncator do
        }}
   }
   @dummy_ctequery_node %PgQuery.Node{
-    node:
-      {:select_stmt,
-       %PgQuery.SelectStmt{
-         where_clause: @dummy_column_ref,
-         op: :SETOP_NONE
-       }}
+    node: {:select_stmt, %PgQuery.SelectStmt{where_clause: @dummy_column_ref, op: :SETOP_NONE}}
   }
-  @dummy_cols_list [
-    %PgQuery.Node{
-      node: {:res_target, %PgQuery.ResTarget{name: @ellipsis}}
-    }
-  ]
-  @dummy_values_list [
-    %PgQuery.Node{
-      node: {:list, %PgQuery.List{items: [@dummy_column_ref]}}
-    }
-  ]
+  @dummy_cols_list [%PgQuery.Node{node: {:res_target, %PgQuery.ResTarget{name: @ellipsis}}}]
+  @dummy_values_list [%PgQuery.Node{node: {:list, %PgQuery.List{items: [@dummy_column_ref]}}}]
 
   defp query_length(protobuf) do
     with {:ok, encoded} <- Protox.encode(protobuf),

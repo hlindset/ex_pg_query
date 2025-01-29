@@ -30,7 +30,7 @@ defmodule ExPgQuery.NodeTraversalTest do
         "t3" => %{alias: "t3", schema: nil, relation: "table_3", location: 110}
       }
 
-      assert select_ctx.aliases == expected_aliases
+      assert select_ctx.table_aliases == expected_aliases
     end
 
     test "keeps aliases scoped to their SelectStmt" do
@@ -52,10 +52,10 @@ defmodule ExPgQuery.NodeTraversalTest do
       subquery_contexts =
         nodes
         |> Enum.filter(fn
-          {%PgQuery.SelectStmt{}, ctx} -> ctx.aliases != %{}
+          {%PgQuery.SelectStmt{}, ctx} -> ctx.table_aliases != %{}
           _ -> nil
         end)
-        |> Enum.map(fn {_node, ctx} -> ctx.aliases end)
+        |> Enum.map(fn {_node, ctx} -> ctx.table_aliases end)
 
       # First subquery should only see t1
       assert Enum.at(subquery_contexts, 0) == %{
@@ -75,7 +75,7 @@ defmodule ExPgQuery.NodeTraversalTest do
           _ -> nil
         end)
 
-      assert outer_ctx.aliases == %{}
+      assert outer_ctx.table_aliases == %{}
     end
   end
 end
