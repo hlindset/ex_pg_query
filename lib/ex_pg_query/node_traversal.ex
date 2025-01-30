@@ -7,6 +7,128 @@ defmodule ExPgQuery.NodeTraversal do
   the query structure.
   """
 
+  @default_node_type %{
+    # SELECT statements
+    PgQuery.SelectStmt => :select,
+
+    # DML statements
+    PgQuery.CopyStmt => :dml,
+    PgQuery.DeleteStmt => :dml,
+    PgQuery.InsertStmt => :dml,
+    PgQuery.MergeStmt => :dml,
+    PgQuery.UpdateStmt => :dml,
+
+    # DDL statements
+    PgQuery.AlterDatabaseRefreshCollStmt => :ddl,
+    PgQuery.AlterDatabaseSetStmt => :ddl,
+    PgQuery.AlterDatabaseStmt => :ddl,
+    PgQuery.AlterEnumStmt => :ddl,
+    PgQuery.AlterEventTrigStmt => :ddl,
+    PgQuery.AlterExtensionContentsStmt => :ddl,
+    PgQuery.AlterExtensionStmt => :ddl,
+    PgQuery.AlterFdwStmt => :ddl,
+    PgQuery.AlterForeignServerStmt => :ddl,
+    PgQuery.AlterFunctionStmt => :ddl,
+    PgQuery.AlterObjectDependsStmt => :ddl,
+    PgQuery.AlterObjectSchemaStmt => :ddl,
+    PgQuery.AlterOperatorStmt => :ddl,
+    PgQuery.AlterOpFamilyStmt => :ddl,
+    PgQuery.AlterOwnerStmt => :ddl,
+    PgQuery.AlterPolicyStmt => :ddl,
+    PgQuery.AlterPublicationStmt => :ddl,
+    PgQuery.AlterRoleSetStmt => :ddl,
+    PgQuery.AlterRoleStmt => :ddl,
+    PgQuery.AlterSeqStmt => :ddl,
+    PgQuery.AlterStatsStmt => :ddl,
+    PgQuery.AlterSubscriptionStmt => :ddl,
+    PgQuery.AlterSystemStmt => :ddl,
+    PgQuery.AlterTableMoveAllStmt => :ddl,
+    PgQuery.AlterTableSpaceOptionsStmt => :ddl,
+    PgQuery.AlterTableStmt => :ddl,
+    PgQuery.AlterTSConfigurationStmt => :ddl,
+    PgQuery.AlterTSDictionaryStmt => :ddl,
+    PgQuery.AlterTypeStmt => :ddl,
+    PgQuery.AlterUserMappingStmt => :ddl,
+    PgQuery.ClusterStmt => :ddl,
+    PgQuery.CompositeTypeStmt => :ddl,
+    PgQuery.CreateAmStmt => :ddl,
+    PgQuery.CreateCastStmt => :ddl,
+    PgQuery.CreateConversionStmt => :ddl,
+    PgQuery.CreatedbStmt => :ddl,
+    PgQuery.CreateDomainStmt => :ddl,
+    PgQuery.CreateEnumStmt => :ddl,
+    PgQuery.CreateEventTrigStmt => :ddl,
+    PgQuery.CreateExtensionStmt => :ddl,
+    PgQuery.CreateFdwStmt => :ddl,
+    PgQuery.CreateForeignServerStmt => :ddl,
+    PgQuery.CreateForeignTableStmt => :ddl,
+    PgQuery.CreateFunctionStmt => :ddl,
+    PgQuery.CreateOpClassStmt => :ddl,
+    PgQuery.CreateOpFamilyStmt => :ddl,
+    PgQuery.CreatePLangStmt => :ddl,
+    PgQuery.CreatePolicyStmt => :ddl,
+    PgQuery.CreatePublicationStmt => :ddl,
+    PgQuery.CreateRangeStmt => :ddl,
+    PgQuery.CreateRoleStmt => :ddl,
+    PgQuery.CreateSchemaStmt => :ddl,
+    PgQuery.CreateSeqStmt => :ddl,
+    PgQuery.CreateStatsStmt => :ddl,
+    PgQuery.CreateStmt => :ddl,
+    PgQuery.CreateSubscriptionStmt => :ddl,
+    PgQuery.CreateTableAsStmt => :ddl,
+    PgQuery.CreateTableSpaceStmt => :ddl,
+    PgQuery.CreateTransformStmt => :ddl,
+    PgQuery.CreateTrigStmt => :ddl,
+    PgQuery.CreateUserMappingStmt => :ddl,
+    PgQuery.DefineStmt => :ddl,
+    PgQuery.DropdbStmt => :ddl,
+    PgQuery.DropRoleStmt => :ddl,
+    PgQuery.DropStmt => :ddl,
+    PgQuery.DropSubscriptionStmt => :ddl,
+    PgQuery.DropTableSpaceStmt => :ddl,
+    PgQuery.DropUserMappingStmt => :ddl,
+    PgQuery.GrantStmt => :ddl,
+    PgQuery.ImportForeignSchemaStmt => :ddl,
+    PgQuery.IndexStmt => :ddl,
+    PgQuery.RefreshMatViewStmt => :ddl,
+    PgQuery.ReindexStmt => :ddl,
+    PgQuery.RenameStmt => :ddl,
+    PgQuery.RuleStmt => :ddl,
+    PgQuery.TruncateStmt => :ddl,
+    PgQuery.VacuumStmt => :ddl,
+    PgQuery.ViewStmt => :ddl,
+
+    # CALL statements
+    PgQuery.CallStmt => :call,
+    PgQuery.DoStmt => :call,
+    PgQuery.ExecuteStmt => :call,
+
+    # Utility statements
+    PgQuery.AlterDefaultPrivilegesStmt => :none,
+    PgQuery.CheckPointStmt => :none,
+    PgQuery.ClosePortalStmt => :none,
+    PgQuery.CommentStmt => :none,
+    PgQuery.ConstraintsSetStmt => :none,
+    PgQuery.DeallocateStmt => :none,
+    PgQuery.DeclareCursorStmt => :none,
+    PgQuery.DiscardStmt => :none,
+    PgQuery.DropOwnedStmt => :none,
+    PgQuery.ExplainStmt => :none,
+    PgQuery.FetchStmt => :none,
+    PgQuery.GrantRoleStmt => :none,
+    PgQuery.ListenStmt => :none,
+    PgQuery.LoadStmt => :none,
+    PgQuery.LockStmt => :none,
+    PgQuery.NotifyStmt => :none,
+    PgQuery.PrepareStmt => :none,
+    PgQuery.ReassignOwnedStmt => :none,
+    PgQuery.SecLabelStmt => :none,
+    PgQuery.TransactionStmt => :none,
+    PgQuery.UnlistenStmt => :none,
+    PgQuery.VariableSetStmt => :none,
+    PgQuery.VariableShowStmt => :none
+  }
+
   defmodule Ctx do
     @moduledoc """
     Represents the context in which a node appears in the query tree.
@@ -28,6 +150,12 @@ defmodule ExPgQuery.NodeTraversal do
               cte_names: []
   end
 
+  defp default_node_type(node) when is_struct(node) do
+    Map.get(@default_node_type, node.__struct__, :none)
+  end
+
+  defp default_node_type(_node), do: :none
+
   @doc """
   Traverses a ParseResult tree and returns a flattened list of nodes with their context.
 
@@ -43,8 +171,8 @@ defmodule ExPgQuery.NodeTraversal do
   """
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
     Enum.flat_map(stmts, fn
-      %{stmt: %{node: {_type, node}}} ->
-        traverse_node(node, %Ctx{})
+      %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {_type, node}}} ->
+        traverse_node(node, %Ctx{type: default_node_type(node)})
         |> List.flatten()
 
       _ ->
@@ -86,17 +214,22 @@ defmodule ExPgQuery.NodeTraversal do
   defp ctx_for_node(%PgQuery.SelectStmt{} = select_stmt, ctx) do
     table_aliases =
       case ctx do
-        # in case of subqueries - keep previous aliases
+        # when select statement is a subquery, keep previous aliases
         %Ctx{subselect_item: true} -> collect_select_aliases(ctx.table_aliases, select_stmt)
+        # otherwise: empty them
         _ -> collect_select_aliases(%{}, select_stmt)
       end
 
     cte_names = collect_cte_names(select_stmt.with_clause)
-    %Ctx{ctx | type: :select, table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
+    %Ctx{ctx | table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
   # SubLink (subqueries)
   defp ctx_for_node(%PgQuery.SubLink{}, ctx),
+    do: %Ctx{ctx | subselect_item: true}
+
+  # RangeSubselect (+ lateral)
+  defp ctx_for_node(%PgQuery.RangeSubselect{lateral: true}, ctx),
     do: %Ctx{ctx | subselect_item: true}
 
   defp ctx_for_node(%PgQuery.InsertStmt{} = insert_stmt, ctx) do
@@ -119,23 +252,23 @@ defmodule ExPgQuery.NodeTraversal do
     %Ctx{ctx | type: :call}
   end
 
-  defp ctx_for_node(node, ctx)
-       when is_struct(node, PgQuery.CreateStmt) or
-              is_struct(node, PgQuery.AlterTableStmt) or
-              is_struct(node, PgQuery.CreateTableAsStmt) or
-              is_struct(node, PgQuery.TruncateStmt) or
-              is_struct(node, PgQuery.CreateTrigStmt) or
-              is_struct(node, PgQuery.VacuumStmt) or
-              is_struct(node, PgQuery.RefreshMatViewStmt) or
-              is_struct(node, PgQuery.DropStmt) or
-              is_struct(node, PgQuery.GrantStmt) or
-              is_struct(node, PgQuery.LockStmt) or
-              is_struct(node, PgQuery.CreateFunctionStmt) or
-              is_struct(node, PgQuery.RenameStmt) or
-              is_struct(node, PgQuery.RuleStmt) or
-              is_struct(node, PgQuery.IndexStmt) or
-              is_struct(node, PgQuery.ViewStmt),
-       do: %Ctx{ctx | type: :ddl}
+  # defp ctx_for_node(node, ctx)
+  #      when is_struct(node, PgQuery.CreateStmt) or
+  #             is_struct(node, PgQuery.AlterTableStmt) or
+  #             is_struct(node, PgQuery.CreateTableAsStmt) or
+  #             is_struct(node, PgQuery.TruncateStmt) or
+  #             is_struct(node, PgQuery.CreateTrigStmt) or
+  #             is_struct(node, PgQuery.VacuumStmt) or
+  #             is_struct(node, PgQuery.RefreshMatViewStmt) or
+  #             is_struct(node, PgQuery.DropStmt) or
+  #             is_struct(node, PgQuery.GrantStmt) or
+  #             is_struct(node, PgQuery.LockStmt) or
+  #             is_struct(node, PgQuery.CreateFunctionStmt) or
+  #             is_struct(node, PgQuery.RenameStmt) or
+  #             is_struct(node, PgQuery.RuleStmt) or
+  #             is_struct(node, PgQuery.IndexStmt) or
+  #             is_struct(node, PgQuery.ViewStmt),
+  #      do: %Ctx{ctx | type: :ddl}
 
   defp ctx_for_node(%PgQuery.WithClause{recursive: recursive}, ctx),
     do: %Ctx{ctx | is_recursive_cte: recursive}
@@ -145,48 +278,61 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp ctx_for_node(_node, ctx), do: ctx
 
+  # ctx_for_field
   #
-  # Updates context based on specific fields within nodes
-  #
+  # Sets the context for a single field (and its descendants) in a node.
+  # E.g. The `into_clause` in a `SELECT INTO` should be a `:ddl`
+  # statement as well as  be considered a `from_clause_item`. This is
+  # useful, because a node type on its own is often not enough to figure
+  # out the context it is used in.
 
-  defp ctx_for_field(%PgQuery.SelectStmt{}, :where_clause, ctx),
-    do: %Ctx{ctx | condition_item: true}
-
-  defp ctx_for_field(%PgQuery.SelectStmt{}, :into_clause, ctx),
-    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
-
-  defp ctx_for_field(%PgQuery.SelectStmt{}, :from_clause, ctx),
-    do: %Ctx{ctx | type: :select, from_clause_item: true}
+  # SELECT
+  defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx) do
+    case field do
+      :where_clause -> %Ctx{ctx | condition_item: true}
+      :into_clause -> %Ctx{ctx | type: :ddl, from_clause_item: true}
+      :from_clause -> %Ctx{ctx | type: :select, from_clause_item: true}
+      _ -> ctx
+    end
+  end
 
   # DELETE
-  defp ctx_for_field(%PgQuery.DeleteStmt{}, :where_clause, ctx),
-    do: %Ctx{ctx | type: :select, condition_item: true}
-
-  defp ctx_for_field(%PgQuery.DeleteStmt{}, :relation, ctx),
-    do: %Ctx{ctx | type: :dml, from_clause_item: true}
-
-  defp ctx_for_field(%PgQuery.DeleteStmt{}, :using_clause, ctx),
-    do: %Ctx{ctx | type: :select, from_clause_item: true}
+  defp ctx_for_field(%PgQuery.DeleteStmt{}, field, ctx) do
+    case field do
+      :where_clause -> %Ctx{ctx | type: :select, condition_item: true}
+      :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
+      :using_clause -> %Ctx{ctx | type: :select, from_clause_item: true}
+      _ -> ctx
+    end
+  end
 
   # UPDATE
-  defp ctx_for_field(%PgQuery.UpdateStmt{}, :relation, ctx),
-    do: %Ctx{ctx | type: :dml, from_clause_item: true}
-
-  defp ctx_for_field(%PgQuery.UpdateStmt{}, :where_clause, ctx),
-    do: %Ctx{ctx | type: :select, condition_item: true}
-
-  defp ctx_for_field(%PgQuery.UpdateStmt{}, :from_clause, ctx),
-    do: %Ctx{ctx | type: :select, from_clause_item: true}
-
-  defp ctx_for_field(%PgQuery.UpdateStmt{}, :relation, ctx),
-    do: %Ctx{ctx | type: :dml, from_clause_item: true}
+  defp ctx_for_field(%PgQuery.UpdateStmt{}, field, ctx) do
+    case field do
+      :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
+      :where_clause -> %Ctx{ctx | type: :select, condition_item: true}
+      :from_clause -> %Ctx{ctx | type: :select, from_clause_item: true}
+      _ -> ctx
+    end
+  end
 
   # INSERT
-  defp ctx_for_field(%PgQuery.InsertStmt{}, :from_clause, ctx),
-    do: %Ctx{ctx | type: :select, from_clause_item: true}
+  defp ctx_for_field(%PgQuery.InsertStmt{}, field, ctx) do
+    case field do
+      :from_clause -> %Ctx{ctx | type: :select, from_clause_item: true}
+      :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
+      _ -> ctx
+    end
+  end
 
-  defp ctx_for_field(%PgQuery.InsertStmt{}, :relation, ctx),
-    do: %Ctx{ctx | type: :dml, from_clause_item: true}
+  # CREATE INDEX
+  defp ctx_for_field(%PgQuery.IndexStmt{}, field, ctx) do
+    case field do
+      :where_clause -> %Ctx{ctx | type: :select, condition_item: true}
+      :relation -> %Ctx{ctx | type: :ddl, from_clause_item: true}
+      _ -> ctx
+    end
+  end
 
   # CREATE TABLE
   defp ctx_for_field(%PgQuery.CreateStmt{}, :relation, ctx),
@@ -210,7 +356,7 @@ defmodule ExPgQuery.NodeTraversal do
 
   # GRANT
   defp ctx_for_field(%PgQuery.GrantStmt{objtype: :OBJECT_TABLE}, :objects, ctx),
-    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
+    do: %Ctx{ctx | from_clause_item: true}
 
   # TRUNCATE
   defp ctx_for_field(%PgQuery.TruncateStmt{}, :relations, ctx),
@@ -232,13 +378,6 @@ defmodule ExPgQuery.NodeTraversal do
   defp ctx_for_field(%PgQuery.CreateTrigStmt{}, :relation, ctx),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
-  # CREATE INDEX
-  defp ctx_for_field(%PgQuery.IndexStmt{}, :where_clause, ctx),
-    do: %Ctx{ctx | type: :select, condition_item: true}
-
-  defp ctx_for_field(%PgQuery.IndexStmt{}, :relation, ctx),
-    do: %Ctx{ctx | type: :ddl, from_clause_item: true}
-
   # LOCK TABLE
   defp ctx_for_field(%PgQuery.LockStmt{}, :relations, ctx),
     do: %Ctx{ctx | type: :select, from_clause_item: true}
@@ -248,8 +387,7 @@ defmodule ExPgQuery.NodeTraversal do
     do: %Ctx{ctx | condition_item: true}
 
   # noop fallback
-  defp ctx_for_field(_node, _field, ctx),
-    do: ctx
+  defp ctx_for_field(_node, _field, ctx), do: ctx
 
   # Extracts message fields that contain nested nodes
   defp msg_to_field_nodes(msg) do
