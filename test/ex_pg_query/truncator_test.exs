@@ -82,163 +82,98 @@ defmodule ExPgQuery.TruncatorTest do
       assert_truncate_eq(query, 35, expected)
     end
 
-    defp assert_truncate_eq(query, truncate_length, expected) do
-      {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-      {:ok, result} = Truncator.truncate(parse_result, truncate_length)
-      assert result == expected
+    test "leaves short queries unchanged" do
+      query = "SELECT * FROM users"
+      assert_truncate_eq(query, 100, query)
     end
 
-    #   test "leaves short queries unchanged" do
-    #     query = "SELECT * FROM users"
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 100)
-    #     assert result == query
-    #   end
+    test "truncates SELECT statement target list" do
+      query =
+        "SELECT id, first_name, last_name, email, phone, address, city, state, zip FROM users"
 
-    #   test "truncates SELECT statement target list" do
-    #     query =
-    #       "SELECT id, first_name, last_name, email, phone, address, city, state, zip FROM users"
+      assert_truncate_eq(query, 30, "SELECT ... FROM users")
+    end
 
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 30)
-    #     assert result == "SELECT ... FROM users"
-    #   end
+    test "truncates WHERE clause" do
+      query = """
+      SELECT * FROM users
+      WHERE first_name = 'John' AND last_name = 'Smith' AND age > 21 AND city = 'New York'
+      """
 
-    #   test "truncates WHERE clause" do
-    #     query = """
-    #     SELECT * FROM users
-    #     WHERE first_name = 'John' AND last_name = 'Smith' AND age > 21 AND city = 'New York'
-    #     """
+      assert_truncate_eq(query, 50, "SELECT * FROM users WHERE ...")
+    end
 
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 50)
-    #     assert result == "SELECT * FROM users WHERE ..."
-    #   end
+    test "truncates VALUES in INSERT" do
+      query = """
+      INSERT INTO users (first_name, last_name, email)
+      VALUES ('John', 'Smith', 'john@example.com'),
+             ('Jane', 'Doe', 'jane@example.com'),
+             ('Bob', 'Wilson', 'bob@example.com')
+      """
 
-    #   test "truncates VALUES in INSERT" do
-    #     query = """
-    #     INSERT INTO users (first_name, last_name, email)
-    #     VALUES ('John', 'Smith', 'john@example.com'),
-    #            ('Jane', 'Doe', 'jane@example.com'),
-    #            ('Bob', 'Wilson', 'bob@example.com')
-    #     """
+      assert_truncate_eq(
+        query,
+        70,
+        "INSERT INTO users (first_name, last_name, email) VALUES (...)"
+      )
+    end
 
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 70)
-    #     assert result == "INSERT INTO users (first_name, last_name, email) VALUES (...)"
-    #   end
+    test "truncates column list in INSERT" do
+      query = """
+      INSERT INTO users (id, first_name, last_name, email, phone, address, city, state, zip, created_at)
+      VALUES (1, 'John', 'Smith', 'john@example.com', '123-456-7890', '123 Main St', 'NY', 'NY', '12345', NOW())
+      """
 
-    #   test "truncates column list in INSERT" do
-    #     query = """
-    #     INSERT INTO users (id, first_name, last_name, email, phone, address, city, state, zip, created_at)
-    #     VALUES (1, 'John', 'Smith', 'john@example.com', '123-456-7890', '123 Main St', 'NY', 'NY', '12345', NOW())
-    #     """
+      assert_truncate_eq(query, 50, "INSERT INTO users (...) VALUES (...)")
+    end
 
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 50) |> IO.inspect()
-    #     assert result == "INSERT INTO users (...) VALUES"
-    #   end
+    test "handles multiple possible truncation points" do
+      query = """
+      SELECT id, name, email, phone
+      FROM users
+      WHERE active = true
+      AND created_at > '2023-01-01'
+      AND email LIKE '%@example.com'
+      """
 
-    #   test "truncates CTE query" do
-    #     query = """
-    #     WITH user_data AS (
-    #       SELECT id, first_name, last_name, email, phone, address
-    #       FROM users
-    #       WHERE active = true AND created_at > '2023-01-01'
-    #     )
-    #     SELECT * FROM user_data
-    #     """
+      # Should truncate the longer part (WHERE clause) first
+      assert_truncate_eq(query, 50, "SELECT id, name, email, phone FROM users WHERE ...")
+    end
 
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 60)
-    #     assert result =~ ~r/WITH user_data AS \(SELECT .+\.\.\.\) SELECT/
-    #   end
+    test "falls back to hard truncation when smart truncation isn't enough" do
+      query = "SELECT * FROM really_really_really_really_long_table_name"
+      assert_truncate_eq(query, 20, "SELECT * FROM rea...")
+    end
 
-    #   test "handles multiple possible truncation points" do
-    #     query = """
-    #     SELECT id, name, email, phone
-    #     FROM users
-    #     WHERE active = true
-    #     AND created_at > '2023-01-01'
-    #     AND email LIKE '%@example.com'
-    #     """
+    test "handles multi-statement queries" do
+      query = """
+      BEGIN;
+      UPDATE users SET status = 'active' WHERE id = 1;
+      INSERT INTO audit_log (user_id, action) VALUES (1, 'status_update');
+      COMMIT;
+      """
 
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 50)
+      trunc_length = 80
 
-    #     # Should truncate the longer part (WHERE clause) first
-    #     assert result == "SELECT id, name, email, phone FROM users WHERE ..."
-    #   end
+      assert_truncate_eq(
+        query,
+        trunc_length,
+        "BEGIN; UPDATE users SET ... = ... WHERE ...; INSERT INTO audit_log (...) VALU..."
+      )
 
-    #   test "falls back to hard truncation when smart truncation isn't enough" do
-    #     query = "SELECT * FROM really_really_really_really_long_table_name"
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 20) |> IO.inspect()
-    #     assert String.length(result) <= 20
-    #     assert String.ends_with?(result, "...")
-    #   end
+      assert_truncate_length(query, trunc_length, trunc_length)
+    end
+  end
 
-    #   test "handles invalid queries" do
-    #     # Invalid SQL
-    #     query = "SELECT * FROM"
-    #     {:error, _} = ExPgQuery.parse_protobuf(query)
-    #   end
+  defp assert_truncate_eq(query, truncate_length, expected) do
+    {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
+    {:ok, result} = Truncator.truncate(parse_result, truncate_length)
+    assert result == expected
+  end
 
-    #   test "truncates UPDATE SET clause" do
-    #     query = """
-    #     UPDATE users
-    #     SET first_name = 'John', last_name = 'Smith', email = 'john@example.com',
-    #         phone = '123-456-7890', address = '123 Main St'
-    #     WHERE id = 1
-    #     """
-
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 50)
-    #     assert result =~ ~r/UPDATE users SET .+ WHERE id = 1/
-    #   end
-
-    #   test "handles multi-statement queries" do
-    #     query = """
-    #     BEGIN;
-    #     UPDATE users SET status = 'active' WHERE id = 1;
-    #     INSERT INTO audit_log (user_id, action) VALUES (1, 'status_update');
-    #     COMMIT;
-    #     """
-
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 80)
-    #     assert String.length(result) <= 80
-    #   end
-
-    #   test "preserves query structure after truncation" do
-    #     query = """
-    #     SELECT id, first_name, last_name, email
-    #     FROM users
-    #     WHERE active = true
-    #     ORDER BY created_at DESC
-    #     LIMIT 10
-    #     """
-
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     {:ok, result} = Truncator.truncate(parse_result, 60)
-
-    #     # Should still have basic SELECT structure
-    #     assert result =~ ~r/SELECT .+ FROM .+ WHERE .+ ORDER BY .+ LIMIT \d+/
-    #   end
-    # end
-
-    # describe "truncate!/2" do
-    #   test "returns truncated string directly" do
-    #     query = "SELECT * FROM users WHERE name = 'test'"
-    #     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    #     result = Truncator.truncate!(parse_result, 20)
-    #     assert String.length(result) <= 20
-    #   end
-
-    #   test "raises error for invalid input" do
-    #     assert_raise RuntimeError, fn ->
-    #       Truncator.truncate!("invalid parse result", 20)
-    #     end
-    #   end
+  defp assert_truncate_length(query, truncate_length, expected) do
+    {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
+    {:ok, result} = Truncator.truncate(parse_result, truncate_length)
+    assert String.length(result) == expected
   end
 end
