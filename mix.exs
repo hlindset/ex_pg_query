@@ -14,6 +14,8 @@ defmodule ExPgQuery.MixProject do
         "coveralls.detail": :test,
         "coveralls.post": :test,
         "coveralls.html": :test,
+        "coveralls.json": :test,
+        "coveralls.lcov": :test,
         "coveralls.cobertura": :test
       ]
     ]

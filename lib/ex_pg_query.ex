@@ -32,10 +32,11 @@ defmodule ExPgQuery do
     %{name: oneof_name} =
       PgQuery.Node.fields_defs() |> Enum.find(&(&1.type == {:message, stmt.__struct__}))
 
-    protobuf = %PgQuery.ParseResult{
-      version: 170_000,
-      stmts: [%PgQuery.RawStmt{stmt: %PgQuery.Node{node: {oneof_name, stmt}}}]
-    }
+    protobuf =
+      %PgQuery.ParseResult{
+        version: 170_000,
+        stmts: [%PgQuery.RawStmt{stmt: %PgQuery.Node{node: {oneof_name, stmt}}}]
+      }
 
     deparse(protobuf)
   end

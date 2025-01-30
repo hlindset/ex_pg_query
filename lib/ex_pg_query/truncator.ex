@@ -12,26 +12,34 @@ defmodule ExPgQuery.Truncator do
     defstruct [:location, :node_type, :length]
   end
 
+  @short_ellipsis "…"
   @ellipsis "..."
   @ellipsis_length String.length(@ellipsis)
   @dummy_column_ref %PgQuery.Node{
     node:
       {:column_ref,
        %PgQuery.ColumnRef{
-         fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: @ellipsis}}}]
+         fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: @short_ellipsis}}}]
        }}
   }
   @dummy_ctequery_node %PgQuery.Node{
     node: {:select_stmt, %PgQuery.SelectStmt{where_clause: @dummy_column_ref, op: :SETOP_NONE}}
   }
-  @dummy_cols_list [%PgQuery.Node{node: {:res_target, %PgQuery.ResTarget{name: @ellipsis}}}]
+  @dummy_cols_list [%PgQuery.Node{node: {:res_target, %PgQuery.ResTarget{name: @short_ellipsis}}}]
   @dummy_values_list [%PgQuery.Node{node: {:list, %PgQuery.List{items: [@dummy_column_ref]}}}]
+
+  defp fix_output(output) do
+    output
+    |> String.replace(~s|SELECT WHERE "#{@short_ellipsis}"|, @ellipsis)
+    |> String.replace(~s|"#{@short_ellipsis}"|, @ellipsis)
+  end
 
   defp query_length(protobuf) do
     with {:ok, encoded} <- Protox.encode(protobuf),
          binary = IO.iodata_to_binary(encoded),
          {:ok, output} <- ExPgQuery.Native.deparse_protobuf(binary) do
-      {:ok, {String.length(output), output}}
+      fixed_output = fix_output(output)
+      {:ok, {String.length(fixed_output), fixed_output}}
     end
   end
 
@@ -60,11 +68,11 @@ defmodule ExPgQuery.Truncator do
     # Find possible truncation points
     truncations =
       find_possible_truncations(tree)
-      |> Enum.reject(&(&1.length <= @ellipsis_length))
+      |> Enum.reject(&(&1.length < @ellipsis_length))
       |> Enum.sort_by(&{length(&1.location) * -1, &1.length * -1})
 
     # Try smart truncation first
-    case try_smart_truncation(tree, truncations, max_length) |> dbg() do
+    case try_smart_truncation(tree, truncations, max_length) do
       {:ok, {length, output}} ->
         if length <= max_length do
           {:ok, output}
@@ -106,12 +114,13 @@ defmodule ExPgQuery.Truncator do
           %PossibleTruncation{node_type: :target_list} ->
             ProtoUtils.update_in_tree!(
               tree,
-              remove_last_element(truncation.location),
+              parent_location(truncation.location),
               fn parent_node ->
                 res_target_name =
                   case parent_node do
-                    %PgQuery.SelectStmt{} -> nil
-                    _ -> @ellipsis
+                    %PgQuery.UpdateStmt{} -> @short_ellipsis
+                    %PgQuery.OnConflictClause{} -> @short_ellipsis
+                    _ -> ""
                   end
 
                 %{
@@ -130,28 +139,28 @@ defmodule ExPgQuery.Truncator do
           %PossibleTruncation{node_type: :where_clause} ->
             ProtoUtils.update_in_tree!(
               tree,
-              remove_last_element(truncation.location),
+              parent_location(truncation.location),
               &%{&1 | where_clause: @dummy_column_ref}
             )
 
           %PossibleTruncation{node_type: :values_lists} ->
             ProtoUtils.update_in_tree!(
               tree,
-              remove_last_element(truncation.location),
+              parent_location(truncation.location),
               &%{&1 | values_lists: @dummy_values_list}
             )
 
           %PossibleTruncation{node_type: :ctequery} ->
             ProtoUtils.update_in_tree!(
               tree,
-              remove_last_element(truncation.location),
+              parent_location(truncation.location),
               &%{&1 | ctequery: @dummy_ctequery_node}
             )
 
           %PossibleTruncation{node_type: :cols} ->
             ProtoUtils.update_in_tree!(
               tree,
-              remove_last_element(truncation.location),
+              parent_location(truncation.location),
               &%{&1 | cols: @dummy_cols_list}
             )
 
@@ -216,7 +225,7 @@ defmodule ExPgQuery.Truncator do
   end
 
   defp cte_query_length(node) do
-    case ExPgQuery.deparse_expr(node) do
+    case ExPgQuery.deparse_stmt(node) do
       {:ok, expr} -> {:ok, String.length(expr)}
       {:error, _} = error -> error
     end
@@ -236,14 +245,14 @@ defmodule ExPgQuery.Truncator do
     end
   end
 
-  defp remove_last_element(list) do
+  defp parent_location(list) do
     list |> Enum.reverse() |> tl() |> Enum.reverse()
   end
 
   def find_possible_truncations(tree) do
     ProtoWalker.walk(tree, [], fn parent_node, field_name, {node, location}, acc ->
-      case field_name do
-        :target_list
+      case {field_name, node} do
+        {:target_list, node}
         when is_struct(parent_node, PgQuery.SelectStmt) or
                is_struct(parent_node, PgQuery.UpdateStmt) or
                is_struct(parent_node, PgQuery.OnConflictClause) ->
@@ -268,7 +277,7 @@ defmodule ExPgQuery.Truncator do
               acc
           end
 
-        :where_clause
+        {:where_clause, node}
         when is_struct(parent_node, PgQuery.SelectStmt) or
                is_struct(parent_node, PgQuery.UpdateStmt) or
                is_struct(parent_node, PgQuery.DeleteStmt) or
@@ -292,7 +301,7 @@ defmodule ExPgQuery.Truncator do
               acc
           end
 
-        :values_lists ->
+        {:values_lists, [_ | _] = node} ->
           case select_values_lists_length(node) do
             {:ok, length} ->
               [
@@ -308,8 +317,12 @@ defmodule ExPgQuery.Truncator do
               acc
           end
 
-        :ctequery when is_struct(parent_node, PgQuery.CommonTableExpr) ->
-          case cte_query_length(node) do
+        {:ctequery,
+         %PgQuery.Node{
+           node: {:select_stmt, cte_select}
+         }}
+        when is_struct(parent_node, PgQuery.CommonTableExpr) ->
+          case cte_query_length(cte_select) do
             {:ok, length} ->
               [
                 %PossibleTruncation{
@@ -324,7 +337,7 @@ defmodule ExPgQuery.Truncator do
               acc
           end
 
-        :cols when is_struct(parent_node, PgQuery.InsertStmt) ->
+        {:cols, node} when is_struct(parent_node, PgQuery.InsertStmt) ->
           case cols_length(node) do
             {:ok, length} ->
               [
