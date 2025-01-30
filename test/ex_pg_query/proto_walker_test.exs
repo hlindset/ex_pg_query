@@ -142,10 +142,7 @@ defmodule ExPgQuery.ProtoWalkerTest do
         }
 
       # accumulated value == the number of nodes visited
-      count =
-        ProtoWalker.walk(node, 0, fn _, _, _, acc ->
-          acc + 1
-        end)
+      count = ProtoWalker.walk(node, 0, fn _, _, _, acc -> acc + 1 end)
 
       assert count == 12
     end
