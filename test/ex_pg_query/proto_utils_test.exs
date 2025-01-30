@@ -1,119 +1,132 @@
 defmodule ExPgQuery.ProtoUtilsTest do
-  use ExUnit.Case
-  alias ExPgQuery.Parser
+  use ExUnit.Case, async: true
+
   alias ExPgQuery.ProtoUtils
 
-  describe "update_in_proto/3" do
-    # test "updates a simple field in a select statement" do
-    #   {:ok, result} = ExPgQuery.parse_protobuf("SELECT * FROM users")
-    #   path = [:stmts, 0, :stmt, :select_stmt, :limit_count]
+  describe "update_in_tree/3" do
+    test "updates a simple value" do
+      tree = %{a: 1}
+      assert {:ok, %{a: 2}} = ProtoUtils.update_in_tree(tree, [:a], fn _ -> 2 end)
+    end
 
-    #   updated = ProtoUtils.update_in_tree!(result, path, fn _ ->
-    #     %PgQuery.Node{
-    #       node: {:a_const, %PgQuery.A_Const{
-    #         val: {:integer, %PgQuery.Integer{ival: 10}}
-    #       }}
-    #     }
-    #   end)
+    test "updates a nested value" do
+      tree = %{a: %{b: 1}}
+      assert {:ok, %{a: %{b: 2}}} = ProtoUtils.update_in_tree(tree, [:a, :b], fn _ -> 2 end)
+    end
 
-    #   assert get_in_path(updated, path).node == {
-    #     :a_const,
-    #     %PgQuery.A_Const{val: {:integer, %PgQuery.Integer{ival: 10}}}
-    #   }
-    # end
+    test "updates a value in a list" do
+      tree = %{items: [1, 2, 3]}
 
-    # test "updates a list by adding a new element" do
-    #   {:ok, result} = ExPgQuery.parse_protobuf("SELECT id, name FROM users")
-    #   path = [:stmts, 0, :stmt, :select_stmt, :target_list]
+      assert {:ok, %{items: [1, 99, 3]}} =
+               ProtoUtils.update_in_tree(tree, [:items, 1], fn _ -> 99 end)
+    end
 
-    #   updated = ProtoUtils.update_in_proto(result, path, fn target_list ->
-    #     target_list ++ [
-    #       %PgQuery.Node{
-    #         node: {:res_target, %PgQuery.ResTarget{
-    #           name: "email",
-    #           val: %PgQuery.Node{
-    #             node: {:column_ref, %PgQuery.ColumnRef{
-    #               fields: [
-    #                 %PgQuery.Node{node: {:string, %PgQuery.String{sval: "email"}}}
-    #               ]
-    #             }}
-    #           }
-    #         }}
-    #       }
-    #     ]
-    #   end)
+    test "handles nil item in list" do
+      tree = %{items: [nil, 2, 3]}
 
-    #   new_target_list = get_in_path(updated, path)
-    #   assert length(new_target_list) == 3
-    #   assert get_in_node(List.last(new_target_list), [:res_target, :name]) == "email"
-    # end
+      assert {:error, "index 0 out of bounds"} =
+               ProtoUtils.update_in_tree(tree, [:items, 0], fn _ -> 99 end)
+    end
 
-    # test "updates a deeply nested node value" do
-    #   {:ok, result} = ExPgQuery.parse_protobuf("SELECT * FROM users WHERE id = 1")
-    #   path = [:stmts, 0, :stmt, :select_stmt, :where_clause, :node, :a_expr, :rexpr]
+    test "handles index out of bounds" do
+      tree = %{items: [1, 2, 3]}
 
-    #   updated = ProtoUtils.update_in_proto(result, path, fn _ ->
-    #     %PgQuery.Node{
-    #       node: {:a_const, %PgQuery.A_Const{
-    #         val: {:integer, %PgQuery.Integer{ival: 42}}
-    #       }}
-    #     }
-    #   end)
+      assert {:error, "index 5 out of bounds"} =
+               ProtoUtils.update_in_tree(tree, [:items, 5], fn _ -> 99 end)
+    end
 
-    #   where_val = get_in_path(updated, path)
-    #   assert get_in_node(where_val, [:a_const, :val, :integer, :ival]) == 42
-    # end
+    test "handles missing keys" do
+      tree = %{a: 1}
 
-    # test "updates multiple nodes at once" do
-    #   {:ok, result} = ExPgQuery.parse_protobuf("SELECT id, name FROM users LIMIT 5")
-    #   paths = [
-    #     [:stmts, 0, :stmt, :select_stmt, :limit_count],
-    #     [:stmts, 0, :stmt, :select_stmt, :limit_offset]
-    #   ]
+      assert {:error, "key b not found"} =
+               ProtoUtils.update_in_tree(tree, [:b], fn _ -> 2 end)
+    end
 
-    #   updated = Enum.reduce(paths, result, fn path, acc ->
-    #     ProtoUtils.update_in_proto(acc, path, fn _ ->
-    #       %PgQuery.Node{
-    #         node: {:a_const, %PgQuery.A_Const{
-    #           val: {:integer, %PgQuery.Integer{ival: 10}}
-    #         }}
-    #       }
-    #     end)
-    #   end)
+    test "updates a PgQuery.Node" do
+      tree = %PgQuery.Node{
+        node: {:select_stmt, %PgQuery.SelectStmt{where_clause: nil}}
+      }
 
-    #   assert get_in_node(get_in_path(updated, Enum.at(paths, 0)), [:a_const, :val, :integer, :ival]) == 10
-    #   assert get_in_node(get_in_path(updated, Enum.at(paths, 1)), [:a_const, :val, :integer, :ival]) == 10
-    # end
+      new_where = %PgQuery.Node{node: {:column_ref, %PgQuery.ColumnRef{fields: []}}}
 
-    # test "handles non-existent paths gracefully" do
-    #   {:ok, result} = ExPgQuery.parse_protobuf("SELECT * FROM users")
-    #   path = [:stmts, 0, :stmt, :nonexistent, :field]
+      {:ok, updated} =
+        ProtoUtils.update_in_tree(tree, [:select_stmt, :where_clause], fn _ -> new_where end)
 
-    #   assert_raise ArgumentError, fn ->
-    #     ProtoUtils.update_in_proto(result, path, fn _ -> "new value" end)
-    #   end
-    # end
-  end
+      assert updated == %PgQuery.Node{
+               node: {:select_stmt, %PgQuery.SelectStmt{where_clause: new_where}}
+             }
+    end
 
-  # Helper functions for traversing nodes in tests
-  defp get_in_path(proto, path) do
-    Enum.reduce(path, proto, fn
-      key, %{node: {_type, node}} when is_atom(key) -> Map.get(node, key)
-      key, map when is_map(map) and is_atom(key) -> Map.get(map, key)
-      key, list when is_list(list) and is_integer(key) -> Enum.at(list, key)
-    end)
-  end
+    test "handles error propagation in PgQuery.Node update" do
+      tree = %PgQuery.Node{
+        node: {:select_stmt, %PgQuery.SelectStmt{}}
+      }
 
-  defp get_in_node(node, []), do: node
-  defp get_in_node(%{node: {type, node}}, [type | rest]), do: get_in_node(node, rest)
+      assert {:error, "key invalid_key not found"} =
+               ProtoUtils.update_in_tree(tree, [:select_stmt, :invalid_key], fn _ -> nil end)
+    end
 
-  defp get_in_node(map, [key, :integer, :ival | rest]) when is_map(map) do
-    case map do
-      %{val: {:integer, %PgQuery.Integer{ival: val}}} -> get_in_node(val, rest)
-      _ -> nil
+    test "handles mismatched node types" do
+      tree = %PgQuery.Node{
+        node: {:select_stmt, %PgQuery.SelectStmt{}}
+      }
+
+      assert {:error, "expected node type update_stmt but found select_stmt"} =
+               ProtoUtils.update_in_tree(tree, [:update_stmt], fn _ -> nil end)
+    end
+
+    test "handles error in oneof field update" do
+      tree = %{key: {:type1, %{invalid_key: 1}}}
+
+      assert {:error, "key value not found"} =
+               ProtoUtils.update_in_tree(tree, [:key, :value], fn _ -> 2 end)
+    end
+
+    test "handles error in regular field update" do
+      tree = %{key: %{invalid_key: 1}}
+
+      assert {:error, "key value not found"} =
+               ProtoUtils.update_in_tree(tree, [:key, :value], fn _ -> 2 end)
+    end
+
+    test "handles oneof fields" do
+      tree = %{key: {:type1, %{value: 1}}}
+
+      {:ok, updated} = ProtoUtils.update_in_tree(tree, [:key, :value], fn _ -> 2 end)
+
+      assert updated == %{key: {:type1, %{value: 2}}}
     end
   end
 
-  defp get_in_node(map, [key | rest]) when is_map(map), do: get_in_node(Map.get(map, key), rest)
-  defp get_in_node(value, []), do: value
+  describe "update_in_tree!/3" do
+    test "successfully updates value" do
+      tree = %{a: 1}
+      assert %{a: 2} = ProtoUtils.update_in_tree!(tree, [:a], fn _ -> 2 end)
+    end
+
+    test "raises error on failure" do
+      tree = %{a: 1}
+
+      assert_raise RuntimeError, "Update error: \"key b not found\"", fn ->
+        ProtoUtils.update_in_tree!(tree, [:b], fn _ -> 2 end)
+      end
+    end
+  end
+
+  describe "put_in_tree/3" do
+    test "sets a value directly" do
+      tree = %{a: 1}
+      assert {:ok, %{a: 2}} = ProtoUtils.put_in_tree(tree, [:a], 2)
+    end
+
+    test "handles nested paths" do
+      tree = %{a: %{b: 1}}
+      assert {:ok, %{a: %{b: 2}}} = ProtoUtils.put_in_tree(tree, [:a, :b], 2)
+    end
+
+    test "handles error cases" do
+      tree = %{a: 1}
+      assert {:error, "key b not found"} = ProtoUtils.put_in_tree(tree, [:b], 2)
+    end
+  end
 end

@@ -65,15 +65,4 @@ defmodule ExPgQuery.ProtoWalker do
       _ -> false
     end)
   end
-
-  # @doc """
-  # Finds a specific location in a tree and yields the found node to the callback.
-  # """
-  # def find_tree_location(tree, searched_location, callback) do
-  #   walk!(tree, fn parent_node, parent_field, node, location ->
-  #     if location == searched_location do
-  #       callback.(parent_node, parent_field, node)
-  #     end
-  #   end)
-  # end
 end
