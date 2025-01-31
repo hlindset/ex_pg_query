@@ -13,16 +13,14 @@ defmodule ExPgQuery.NodeTraversal do
   - Clause-specific context (FROM, WHERE, etc.)
   """
 
-  @doc """
-  Maps (root) PostgreSQL statement types to their general categories.
-
-  Categories are:
-  - :select - SELECT statements
-  - :dml - Data Manipulation (INSERT, UPDATE, DELETE, etc.)
-  - :ddl - Data Definition (CREATE, ALTER, DROP, etc.)
-  - :call - Procedure calls and similar execution statements
-  - :none - Utility and other statements
-  """
+  # Maps PostgreSQL statement types to their general categories.
+  #
+  # Categories are:
+  # - :select - SELECT statements
+  # - :dml - Data Manipulation (INSERT, UPDATE, DELETE, etc.)
+  # - :ddl - Data Definition (CREATE, ALTER, DROP, etc.)
+  # - :call - Procedure calls and similar execution statements
+  # - :none - Utility and other statements
   @default_node_type %{
     # SELECT statements
     PgQuery.SelectStmt => :select,
@@ -197,9 +195,8 @@ defmodule ExPgQuery.NodeTraversal do
 
   ## Example
 
-      iex> {:ok, result} = Parser.parse("SELECT * FROM users")
-      iex> NodeTraversal.nodes(result.protobuf)
-      [{%PgQuery.SelectStmt{...}, %Ctx{type: :select, ...}}, ...]
+      iex> {:ok, result} = ExPgQuery.Parser.parse("SELECT * FROM users")
+      iex> ExPgQuery.NodeTraversal.nodes(result.protobuf)
   """
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
     Enum.flat_map(stmts, fn

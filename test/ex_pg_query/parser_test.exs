@@ -3,6 +3,8 @@ defmodule ExPgQuery.ParserTest do
 
   alias ExPgQuery.Parser
 
+  doctest ExPgQuery.Parser
+
   describe "parse/1 for SELECT statements" do
     test "parses simple SELECT query" do
       {:ok, result} = Parser.parse("SELECT 1")
@@ -2024,8 +2026,6 @@ defmodule ExPgQuery.ParserTest do
     end
 
     test "finds tables in the subquery with EXCEPT" do
-      alias Erl2exVendored.Pipeline.Parse
-
       {:ok, result} =
         Parser.parse("""
           CREATE TABLE foo AS

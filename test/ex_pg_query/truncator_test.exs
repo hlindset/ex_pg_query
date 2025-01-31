@@ -3,6 +3,8 @@ defmodule ExPgQuery.TruncatorTest do
 
   alias ExPgQuery.Truncator
 
+  doctest ExPgQuery.Truncator
+
   describe "truncate/2" do
     test "omits target list" do
       query = "SELECT a, b, c, d, e, f FROM xyz WHERE a = b"

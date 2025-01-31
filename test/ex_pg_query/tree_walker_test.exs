@@ -3,6 +3,8 @@ defmodule ExPgQuery.TreeWalkerTest do
 
   alias ExPgQuery.TreeWalker
 
+  doctest ExPgQuery.TreeWalker
+
   describe "walk/3" do
     test "traverses a simple node" do
       # Create a simple node with a message type
@@ -18,7 +20,7 @@ defmodule ExPgQuery.TreeWalkerTest do
 
       # The walker visits the string node once
       assert length(visited) == 1
-      [{node, field_name, child_node, location}] = visited
+      [{node, _field_name, child_node, location}] = visited
       assert node == simple_node
       assert match?(%PgQuery.String{sval: "test"}, child_node)
       assert location == [:string]

@@ -8,10 +8,10 @@ defmodule ExPgQuery.Truncator do
   3. Falls back to simple string truncation if smart truncation isn't sufficient
 
   Example:
-      iex> long_query = "SELECT very, many, columns, that, make, query, too, long FROM table"
+      iex> long_query = "SELECT very, many, columns, that, make, query, too, long FROM a_table"
       iex> {:ok, protobuf} = ExPgQuery.parse_protobuf(long_query)
-      iex> ExPgQuery.Truncator.truncate(protobuf, 20)
-      {:ok, "SELECT ... FROM table"}
+      iex> ExPgQuery.Truncator.truncate(protobuf, 30)
+      {:ok, "SELECT ... FROM a_table"}
   """
 
   alias ExPgQuery.TreeWalker
@@ -93,8 +93,8 @@ defmodule ExPgQuery.Truncator do
   ## Examples
       iex> query = "SELECT * FROM users WHERE name = 'very long name'"
       iex> {:ok, tree} = ExPgQuery.parse_protobuf(query)
-      iex> ExPgQuery.Truncator.truncate(tree, 25)
-      {:ok, "SELECT * FROM users ..."}
+      iex> ExPgQuery.Truncator.truncate(tree, 30)
+      {:ok, "SELECT * FROM users WHERE ..."}
   """
   def truncate(%PgQuery.ParseResult{} = tree, max_length) do
     with {:ok, {length, output}} <- query_length(tree) do

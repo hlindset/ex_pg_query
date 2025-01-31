@@ -3,6 +3,8 @@ defmodule ExPgQuery.TreeUtilsTest do
 
   alias ExPgQuery.TreeUtils
 
+  doctest ExPgQuery.TreeUtils
+
   describe "update_in_tree/3" do
     test "updates a simple value" do
       tree = %{a: 1}

@@ -1,7 +1,10 @@
 defmodule ExPgQuery.NodeTraversalTest do
   use ExUnit.Case
 
-  alias ExPgQuery.{Parser, NodeTraversal}
+  alias ExPgQuery.Parser
+  alias ExPgQuery.NodeTraversal
+
+  doctest ExPgQuery.NodeTraversal
 
   describe "table alias tracking" do
     test "tracks table aliases in simple joins" do
