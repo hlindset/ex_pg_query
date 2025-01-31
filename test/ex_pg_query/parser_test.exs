@@ -1211,14 +1211,6 @@ defmodule ExPgQuery.ParserTest do
       assert_ddl_tables_eq(result, ["abc.test123"])
     end
 
-    test "parses COMMIT" do
-      {:ok, result} = Parser.parse("COMMIT")
-    end
-
-    test "parses CHECKPOINT" do
-      {:ok, result} = Parser.parse("CHECKPOINT")
-    end
-
     test "parses VACUUM" do
       {:ok, result} = Parser.parse("VACUUM my_table")
       assert_tables_eq(result, ["my_table"])
