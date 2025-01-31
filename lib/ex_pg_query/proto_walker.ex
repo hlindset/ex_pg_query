@@ -1,17 +1,54 @@
 defmodule ExPgQuery.ProtoWalker do
   @moduledoc """
-  Traverses a Protobuf message tree, yielding each node to a callback function.
+  Traverses a PgQuery Protobuf message tree, yielding each node to a callback function.
 
-  Can traverse with either a simple node callback or with full location tracking.
+  It supports:
+
+  - Traversal of nested message structures
+  - Handling of list nodes
+  - Location tracking for each visited node
+  - Accumulation of results through callbacks
+
+  The walker maintains a path (location) to each node as it traverses the tree,
+  allowing for precise tracking of node positions in the overall structure.
+  """
+
+  @doc """
+  Walks through a Protobuf message tree, applying a callback function to each node.
+
+  ## Parameters
+
+    * `tree` - The root node of the Protobuf message tree to traverse
+    * `acc` - The initial accumulator value
+    * `callback` - A function that receives four arguments:
+      * The parent node
+      * The field name or index
+      * A tuple of {current_node, location}
+      * The current accumulator value
+
+  ## Returns
+
+  Returns the final accumulator value after traversing all nodes.
+
+  ## Example
+
+      ProtoWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
+        [{node, field_name, child_node, location} | acc]
+      end)
   """
   def walk(tree, acc, callback) do
     {_, result} = do_walk([{tree, []}], acc, callback)
     result
   end
 
-  # # Walking with location tracking
+  # Handles the base case when there are no more nodes to process
   defp do_walk([] = nodes, acc, _callback), do: {nodes, acc}
 
+  # Main traversal function that processes each node and its children
+  # Handles three types of nodes:
+  # 1. Protobuf messages (structs)
+  # 2. Lists of nodes
+  # 3. Terminal values (neither messages nor lists)
   defp do_walk([{parent_node, parent_location} | rest], acc, callback) do
     {nodes, new_acc} =
       case parent_node do
@@ -40,6 +77,8 @@ defmodule ExPgQuery.ProtoWalker do
     do_walk(nodes ++ rest, new_acc, callback)
   end
 
+  # Converts a Protobuf message into a list of field nodes that should be traversed
+  # Only includes message-type fields and handles special case of oneof fields in PgQuery.Node
   defp msg_to_field_nodes(msg) do
     apply(msg.__struct__, :fields_defs, [])
     |> Enum.filter(fn
