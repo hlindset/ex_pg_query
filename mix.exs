@@ -34,6 +34,7 @@ defmodule ExPgQuery.MixProject do
     [
       {:protox, "~> 1.7"},
       {:excoveralls, "~> 0.18", only: :test},
+      {:junit_formatter, "~> 3.4", only: :test},
       {:elixir_make, "~> 0.9", runtime: false}
     ]
   end
