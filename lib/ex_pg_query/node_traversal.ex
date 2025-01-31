@@ -234,41 +234,23 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp ctx_for_node(%PgQuery.InsertStmt{} = insert_stmt, ctx) do
     cte_names = collect_cte_names(insert_stmt.with_clause)
-    %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
+    %Ctx{ctx | cte_names: ctx.cte_names ++ cte_names}
   end
 
   defp ctx_for_node(%PgQuery.UpdateStmt{} = update_stmt, ctx) do
     table_aliases = collect_update_aliases(update_stmt)
     cte_names = collect_cte_names(update_stmt.with_clause)
-    %Ctx{ctx | type: :dml, table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
+    %Ctx{ctx | table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
   defp ctx_for_node(%PgQuery.DeleteStmt{} = delete_stmt, ctx) do
     cte_names = collect_cte_names(delete_stmt.with_clause)
-    %Ctx{ctx | type: :dml, cte_names: ctx.cte_names ++ cte_names}
+    %Ctx{ctx | cte_names: ctx.cte_names ++ cte_names}
   end
 
   defp ctx_for_node(%PgQuery.FuncCall{}, ctx) do
     %Ctx{ctx | type: :call}
   end
-
-  # defp ctx_for_node(node, ctx)
-  #      when is_struct(node, PgQuery.CreateStmt) or
-  #             is_struct(node, PgQuery.AlterTableStmt) or
-  #             is_struct(node, PgQuery.CreateTableAsStmt) or
-  #             is_struct(node, PgQuery.TruncateStmt) or
-  #             is_struct(node, PgQuery.CreateTrigStmt) or
-  #             is_struct(node, PgQuery.VacuumStmt) or
-  #             is_struct(node, PgQuery.RefreshMatViewStmt) or
-  #             is_struct(node, PgQuery.DropStmt) or
-  #             is_struct(node, PgQuery.GrantStmt) or
-  #             is_struct(node, PgQuery.LockStmt) or
-  #             is_struct(node, PgQuery.CreateFunctionStmt) or
-  #             is_struct(node, PgQuery.RenameStmt) or
-  #             is_struct(node, PgQuery.RuleStmt) or
-  #             is_struct(node, PgQuery.IndexStmt) or
-  #             is_struct(node, PgQuery.ViewStmt),
-  #      do: %Ctx{ctx | type: :ddl}
 
   defp ctx_for_node(%PgQuery.WithClause{recursive: recursive}, ctx),
     do: %Ctx{ctx | is_recursive_cte: recursive}
