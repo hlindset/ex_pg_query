@@ -4,9 +4,25 @@ defmodule ExPgQuery.NodeTraversal do
 
   This module provides functionality to walk through a parsed PostgreSQL query tree,
   collecting each node along with contextual information about where it appears in
-  the query structure.
+  the query structure. It handles:
+
+  - Statement type classification (SELECT, DML, DDL, CALL)
+  - Table alias tracking
+  - CTE (Common Table Expression) tracking
+  - Subquery context management
+  - Clause-specific context (FROM, WHERE, etc.)
   """
 
+  @doc """
+  Maps (root) PostgreSQL statement types to their general categories.
+
+  Categories are:
+  - :select - SELECT statements
+  - :dml - Data Manipulation (INSERT, UPDATE, DELETE, etc.)
+  - :ddl - Data Definition (CREATE, ALTER, DROP, etc.)
+  - :call - Procedure calls and similar execution statements
+  - :none - Utility and other statements
+  """
   @default_node_type %{
     # SELECT statements
     PgQuery.SelectStmt => :select,
@@ -133,10 +149,16 @@ defmodule ExPgQuery.NodeTraversal do
     @moduledoc """
     Represents the context in which a node appears in the query tree.
 
-    Fields:
-    - type: The type of statement (:none, :select, :dml, :ddl, :call)
-    - current_cte: Name of the CTE currently being processed, if any
-    - is_recursive_cte: Whether the current CTE is recursive
+    ## Fields
+
+    * `type` - The type of statement (:none, :select, :dml, :ddl, :call)
+    * `current_cte` - Name of the CTE currently being processed
+    * `is_recursive_cte` - Boolean indicating if current CTE is recursive
+    * `subselect_item` - Boolean indicating if node is part of a subselect
+    * `from_clause_item` - Boolean indicating if node is in a FROM clause
+    * `condition_item` - Boolean indicating if node is in a condition (WHERE, JOIN ON, etc.)
+    * `table_aliases` - Map of table aliases to their details in the current scope
+    * `cte_names` - List of CTE names defined
     """
     @type stmt_type :: :none | :select | :dml | :ddl | :call
 
@@ -150,6 +172,7 @@ defmodule ExPgQuery.NodeTraversal do
               cte_names: []
   end
 
+  # Gets the default statement type for a node
   defp default_node_type(node) when is_struct(node) do
     Map.get(@default_node_type, node.__struct__, :none)
   end
@@ -157,17 +180,26 @@ defmodule ExPgQuery.NodeTraversal do
   defp default_node_type(_node), do: :none
 
   @doc """
-  Traverses a ParseResult tree and returns a flattened list of nodes with their context.
+  Traverses a ParseResult tree and returns a list of nodes with their context.
+
+  Processes each statement in the parse result, building up context information as it
+  traverses the tree. This includes tracking table aliases, CTEs, and statement types.
 
   ## Parameters
-    - parse_result: A PgQuery.ParseResult struct containing the parsed query
+
+    * `parse_result` - A PgQuery.ParseResult struct containing the parsed query
 
   ## Returns
-    A list of tuples containing {node, context} pairs for each node in the tree.
+
+    List of {node, context} tuples where:
+    * `node` is the AST node
+    * `context` is a Ctx struct containing contextual information
 
   ## Example
-      iex> ExPgQuery.NodeTraversal.nodes(parse_result)
-      [{%PgQuery.SelectStmt{...}, %Ctx{type: :select}}, ...]
+
+      iex> {:ok, result} = Parser.parse("SELECT * FROM users")
+      iex> NodeTraversal.nodes(result.protobuf)
+      [{%PgQuery.SelectStmt{...}, %Ctx{type: :select, ...}}, ...]
   """
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
     Enum.flat_map(stmts, fn
@@ -207,10 +239,9 @@ defmodule ExPgQuery.NodeTraversal do
     [{node, updated_ctx} | children]
   end
 
-  #
-  # Updates context based on the type of node being processed
-  #
+  # Context Update Functions
 
+  # Updates context for SELECT statements, handling aliases and CTEs
   defp ctx_for_node(%PgQuery.SelectStmt{} = select_stmt, ctx) do
     table_aliases =
       case ctx do
@@ -397,6 +428,7 @@ defmodule ExPgQuery.NodeTraversal do
     end)
   end
 
+  # Collects CTE names from a WITH clause
   defp collect_cte_names(%PgQuery.WithClause{ctes: ctes}) when is_list(ctes) do
     Enum.reduce(ctes, [], fn
       %PgQuery.Node{node: {:common_table_expr, %PgQuery.CommonTableExpr{ctename: ctename}}},
@@ -410,10 +442,13 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp collect_cte_names(_with_clause), do: []
 
+  # Collects aliases from a SELECT statement's FROM clause
   defp collect_select_aliases(aliases, %PgQuery.SelectStmt{from_clause: from_clause}) do
     collect_from_clause_aliases(aliases, from_clause)
   end
 
+  # Collects aliases from an UPDATE statement, combining the target relation
+  # and any additional FROM clause aliases
   defp collect_update_aliases(%PgQuery.UpdateStmt{relation: relation, from_clause: from_clause}) do
     %{}
     |> collect_rvar_aliases(relation)
@@ -422,14 +457,19 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp collect_update_aliases(_update_stmt), do: %{}
 
+  # Processes a FROM clause to collect all table aliases, handling both
+  # direct table references (range_var) and JOINs
   defp collect_from_clause_aliases(aliases, from_clause) when is_list(from_clause) do
     Enum.reduce(from_clause, aliases, fn
+      # Handle direct table references
       %PgQuery.Node{node: {:range_var, rvar}}, aliases_acc ->
         collect_rvar_aliases(aliases_acc, rvar)
 
+      # Handle JOIN expressions
       %PgQuery.Node{node: {:join_expr, join}}, aliases_acc ->
         collect_join_aliases(aliases_acc, join)
 
+      # Skip other node types
       _other, aliases_acc ->
         aliases_acc
     end)
@@ -437,6 +477,8 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp collect_from_clause_aliases(aliases, _from_clause), do: aliases
 
+  # Extracts alias information from a RangeVar node, including schema,
+  # relation name, alias name, and source location
   defp collect_rvar_aliases(aliases, %PgQuery.RangeVar{
          schemaname: schemaname,
          relname: relname,
@@ -455,19 +497,23 @@ defmodule ExPgQuery.NodeTraversal do
 
   defp collect_rvar_aliases(aliases, _rvar), do: aliases
 
+  # Processes JOIN expressions, collecting aliases from both sides of the join
   defp collect_join_aliases(aliases, %PgQuery.JoinExpr{} = join) do
     aliases
     |> collect_from_node(join.larg)
     |> collect_from_node(join.rarg)
   end
 
+  # Handle direct table references in joins
   defp collect_from_node(aliases, %PgQuery.Node{node: {:range_var, rvar}}) do
     collect_rvar_aliases(aliases, rvar)
   end
 
+  # Handle nested joins
   defp collect_from_node(aliases, %PgQuery.Node{node: {:join_expr, join}}) do
     collect_join_aliases(aliases, join)
   end
 
+  # Skip other node types
   defp collect_from_node(aliases, _), do: aliases
 end
