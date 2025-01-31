@@ -17,7 +17,8 @@ defmodule ExPgQuery.MixProject do
         "coveralls.json": :test,
         "coveralls.lcov": :test,
         "coveralls.cobertura": :test
-      ]
+      ],
+      compilers: [:elixir_make] ++ Mix.compilers()
     ]
   end
 
@@ -32,7 +33,8 @@ defmodule ExPgQuery.MixProject do
   defp deps do
     [
       {:protox, "~> 1.7"},
-      {:excoveralls, "~> 0.18", only: :test}
+      {:excoveralls, "~> 0.18", only: :test},
+      {:elixir_make, "~> 0.9", runtime: false}
     ]
   end
 end
