@@ -59,13 +59,13 @@ defmodule ExPgQuery.NodeTraversalTest do
 
       # First subquery should only see t1
       assert Enum.at(subquery_contexts, 0) == %{
-        "t1" => %{alias: "t1", schema: nil, relation: "table_1", location: 32}
-      }
+               "t1" => %{alias: "t1", schema: nil, relation: "table_1", location: 32}
+             }
 
       # Second subquery should only see t2
       assert Enum.at(subquery_contexts, 1) == %{
-        "t2" => %{alias: "t2", schema: nil, relation: "table_2", location: 75}
-      }
+               "t2" => %{alias: "t2", schema: nil, relation: "table_2", location: 75}
+             }
 
       # Outer query should only see sub1 and sub2
       outer_ctx =

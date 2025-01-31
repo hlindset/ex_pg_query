@@ -14,8 +14,8 @@ defmodule ExPgQuery.Truncator do
       {:ok, "SELECT ... FROM table"}
   """
 
-  alias ExPgQuery.ProtoWalker
-  alias ExPgQuery.ProtoUtils
+  alias ExPgQuery.TreeWalker
+  alias ExPgQuery.TreeUtils
 
   defmodule PossibleTruncation do
     @moduledoc """
@@ -180,22 +180,22 @@ defmodule ExPgQuery.Truncator do
       %PossibleTruncation{node_type: :target_list, parent_node: parent_node, location: location}
       when is_struct(parent_node, PgQuery.UpdateStmt) or
              is_struct(parent_node, PgQuery.OnConflictClause) ->
-        ProtoUtils.put_in_tree(tree, location, @dummy_named_target_list)
+        TreeUtils.put_in_tree(tree, location, @dummy_named_target_list)
 
       %PossibleTruncation{node_type: :target_list, location: location} ->
-        ProtoUtils.put_in_tree(tree, location, @dummy_unnamed_target_list)
+        TreeUtils.put_in_tree(tree, location, @dummy_unnamed_target_list)
 
       %PossibleTruncation{node_type: :where_clause, location: location} ->
-        ProtoUtils.put_in_tree(tree, location, @dummy_column_ref)
+        TreeUtils.put_in_tree(tree, location, @dummy_column_ref)
 
       %PossibleTruncation{node_type: :values_lists, location: location} ->
-        ProtoUtils.put_in_tree(tree, location, @dummy_values_list)
+        TreeUtils.put_in_tree(tree, location, @dummy_values_list)
 
       %PossibleTruncation{node_type: :ctequery, location: location} ->
-        ProtoUtils.put_in_tree(tree, location, @dummy_ctequery_node)
+        TreeUtils.put_in_tree(tree, location, @dummy_ctequery_node)
 
       %PossibleTruncation{node_type: :cols, location: location} ->
-        ProtoUtils.put_in_tree(tree, location, @dummy_cols_list)
+        TreeUtils.put_in_tree(tree, location, @dummy_cols_list)
 
       possible_truncation ->
         {:error, {:unhandled_truncation, possible_truncation}}
@@ -285,7 +285,7 @@ defmodule ExPgQuery.Truncator do
   # For each candidate, calculates how long that part of the query is when rendered
   # as a string, to prioritize which parts to truncate first.
   defp find_possible_truncations(tree) do
-    ProtoWalker.walk(tree, [], fn parent_node, field_name, {node, location}, acc ->
+    TreeWalker.walk(tree, [], fn parent_node, field_name, {node, location}, acc ->
       case {field_name, node} do
         # Target lists in SELECT/UPDATE/ON CONFLICT statements
         {:target_list, node}

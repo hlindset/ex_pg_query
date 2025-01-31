@@ -1,7 +1,7 @@
-defmodule ExPgQuery.ProtoWalkerTest do
+defmodule ExPgQuery.TreeWalkerTest do
   use ExUnit.Case, async: true
 
-  alias ExPgQuery.ProtoWalker
+  alias ExPgQuery.TreeWalker
 
   describe "walk/3" do
     test "traverses a simple node" do
@@ -12,7 +12,7 @@ defmodule ExPgQuery.ProtoWalkerTest do
 
       # Create a callback that collects visited nodes
       visited =
-        ProtoWalker.walk(simple_node, [], fn node, field_name, {child_node, location}, acc ->
+        TreeWalker.walk(simple_node, [], fn node, field_name, {child_node, location}, acc ->
           [{node, field_name, child_node, location} | acc]
         end)
 
@@ -45,7 +45,7 @@ defmodule ExPgQuery.ProtoWalkerTest do
 
       # Collect all visited nodes and their paths
       visited =
-        ProtoWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
+        TreeWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
           [{node, field_name, child_node, location} | acc]
         end)
 
@@ -85,7 +85,7 @@ defmodule ExPgQuery.ProtoWalkerTest do
 
       # Collect visited nodes
       visited =
-        ProtoWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
+        TreeWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
           [{node, field_name, child_node, location} | acc]
         end)
 
@@ -106,11 +106,11 @@ defmodule ExPgQuery.ProtoWalkerTest do
 
     test "handles empty or nil nodes" do
       # Test with nil node
-      assert ProtoWalker.walk(nil, [], fn _, _, _, acc -> acc end) == []
+      assert TreeWalker.walk(nil, [], fn _, _, _, acc -> acc end) == []
 
       # Test with empty message
       empty_node = %PgQuery.Node{node: nil}
-      assert ProtoWalker.walk(empty_node, [], fn _, _, _, acc -> acc end) == []
+      assert TreeWalker.walk(empty_node, [], fn _, _, _, acc -> acc end) == []
     end
 
     test "accumulates values correctly" do
@@ -142,7 +142,7 @@ defmodule ExPgQuery.ProtoWalkerTest do
         }
 
       # accumulated value == the number of nodes visited
-      count = ProtoWalker.walk(node, 0, fn _, _, _, acc -> acc + 1 end)
+      count = TreeWalker.walk(node, 0, fn _, _, _, acc -> acc + 1 end)
 
       assert count == 12
     end

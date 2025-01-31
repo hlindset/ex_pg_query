@@ -1,4 +1,4 @@
-defmodule ExPgQuery.ProtoUtils do
+defmodule ExPgQuery.TreeUtils do
   @moduledoc """
   Utilities for working with libpg_query protobufs.
   """

@@ -19,7 +19,8 @@ defmodule ExPgQuery.Parser do
   def parse(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
          {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
-      nodes = NodeTraversal.nodes(protobuf) # |> dbg(limit: :infinity, printable_limit: :infinity)
+      # |> dbg(limit: :infinity, printable_limit: :infinity)
+      nodes = NodeTraversal.nodes(protobuf)
       initial_result = %Result{protobuf: protobuf}
 
       result =

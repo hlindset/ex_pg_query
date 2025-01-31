@@ -1,4 +1,4 @@
-defmodule ExPgQuery.ProtoWalker do
+defmodule ExPgQuery.TreeWalker do
   @moduledoc """
   Traverses a PgQuery Protobuf message tree, yielding each node to a callback function.
 
@@ -32,7 +32,7 @@ defmodule ExPgQuery.ProtoWalker do
 
   ## Example
 
-      ProtoWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
+      TreeWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
         [{node, field_name, child_node, location} | acc]
       end)
   """
