@@ -9,7 +9,7 @@ defmodule ExPgQuery.Truncator do
 
   defmodule PossibleTruncation do
     @moduledoc "Represents a location in the query that could be truncated"
-    defstruct [:location, :node_type, :length]
+    defstruct [:parent_node, :location, :node_type, :length]
   end
 
   @short_ellipsis "…"
@@ -108,70 +108,39 @@ defmodule ExPgQuery.Truncator do
   end
 
   defp update_tree(tree, truncation) do
-    try do
-      updated_tree =
-        case truncation do
-          %PossibleTruncation{node_type: :target_list} ->
-            ProtoUtils.update_in_tree!(
-              tree,
-              parent_location(truncation.location),
-              fn parent_node ->
-                res_target_name =
-                  case parent_node do
-                    %PgQuery.UpdateStmt{} -> @short_ellipsis
-                    %PgQuery.OnConflictClause{} -> @short_ellipsis
-                    _ -> ""
-                  end
+    case truncation do
+      %PossibleTruncation{
+        node_type: :target_list,
+        parent_node: parent_node,
+        location: location
+      } ->
+        res_target_name =
+          case parent_node do
+            %PgQuery.UpdateStmt{} -> @short_ellipsis
+            %PgQuery.OnConflictClause{} -> @short_ellipsis
+            _ -> ""
+          end
 
-                %{
-                  parent_node
-                  | target_list: [
-                      %PgQuery.Node{
-                        node:
-                          {:res_target,
-                           %PgQuery.ResTarget{name: res_target_name, val: @dummy_column_ref}}
-                      }
-                    ]
-                }
-              end
-            )
+        ProtoUtils.put_in_tree(tree, location, [
+          %PgQuery.Node{
+            node: {:res_target, %PgQuery.ResTarget{name: res_target_name, val: @dummy_column_ref}}
+          }
+        ])
 
-          %PossibleTruncation{node_type: :where_clause} ->
-            ProtoUtils.update_in_tree!(
-              tree,
-              parent_location(truncation.location),
-              &%{&1 | where_clause: @dummy_column_ref}
-            )
+      %PossibleTruncation{node_type: :where_clause, location: location} ->
+        ProtoUtils.put_in_tree(tree, location, @dummy_column_ref)
 
-          %PossibleTruncation{node_type: :values_lists} ->
-            ProtoUtils.update_in_tree!(
-              tree,
-              parent_location(truncation.location),
-              &%{&1 | values_lists: @dummy_values_list}
-            )
+      %PossibleTruncation{node_type: :values_lists, location: location} ->
+        ProtoUtils.put_in_tree(tree, location, @dummy_values_list)
 
-          %PossibleTruncation{node_type: :ctequery} ->
-            ProtoUtils.update_in_tree!(
-              tree,
-              parent_location(truncation.location),
-              &%{&1 | ctequery: @dummy_ctequery_node}
-            )
+      %PossibleTruncation{node_type: :ctequery, location: location} ->
+        ProtoUtils.put_in_tree(tree, location, @dummy_ctequery_node)
 
-          %PossibleTruncation{node_type: :cols} ->
-            ProtoUtils.update_in_tree!(
-              tree,
-              parent_location(truncation.location),
-              &%{&1 | cols: @dummy_cols_list}
-            )
+      %PossibleTruncation{node_type: :cols, location: location} ->
+        ProtoUtils.put_in_tree(tree, location, @dummy_cols_list)
 
-          _other ->
-            tree
-        end
-
-      {:ok, updated_tree}
-    rescue
-      e in RuntimeError -> {:error, e.message}
-      _ -> {:error, "Unknown error during tree update"}
+      possible_truncation ->
+        {:error, {:unhandled_truncation, possible_truncation}}
     end
   end
 
@@ -266,6 +235,7 @@ defmodule ExPgQuery.Truncator do
             {:ok, length} ->
               [
                 %PossibleTruncation{
+                  parent_node: parent_node,
                   location: location,
                   node_type: :target_list,
                   length: length
@@ -290,6 +260,7 @@ defmodule ExPgQuery.Truncator do
             {:ok, length} ->
               [
                 %PossibleTruncation{
+                  parent_node: parent_node,
                   location: location,
                   node_type: :where_clause,
                   length: length
@@ -306,6 +277,7 @@ defmodule ExPgQuery.Truncator do
             {:ok, length} ->
               [
                 %PossibleTruncation{
+                  parent_node: parent_node,
                   location: location,
                   node_type: :values_lists,
                   length: length
@@ -326,6 +298,7 @@ defmodule ExPgQuery.Truncator do
             {:ok, length} ->
               [
                 %PossibleTruncation{
+                  parent_node: parent_node,
                   location: location,
                   node_type: :ctequery,
                   length: length
@@ -342,6 +315,7 @@ defmodule ExPgQuery.Truncator do
             {:ok, length} ->
               [
                 %PossibleTruncation{
+                  parent_node: parent_node,
                   location: location,
                   node_type: :cols,
                   length: length
