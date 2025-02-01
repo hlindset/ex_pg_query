@@ -1,21 +1,13 @@
 # ExPgQuery
 
-**TODO: Add description**
+Elixir library with a C NIF for parsing PostgreSQL queries. Very much inspired by [pganalyze/pg_query](https://github.com/pganalyze/pg_query), and utilizes [pganalyze/libpg_query](https://github.com/pganalyze/libpg_query) for turning queries into a parsetree.
+
+### Currently supports
+* Converting queries to/from a protobuf based parsetree
+* Parsing queries: outputting tables, table aliases, CTEs, functions and filter columns
+* Smart query truncation
+* Query fingerprinting
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `ex_pg_query` to your list of dependencies in `mix.exs`:
-
-```elixir
-def deps do
-  [
-    {:ex_pg_query, "~> 0.1.0"}
-  ]
-end
-```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/ex_pg_query>.
-
+Not published to Hex yet.
