@@ -35,8 +35,9 @@ defmodule ExPgQuery.Native do
     - `{:error, reason}` - Error with reason
 
   ## Examples
-      iex> ExPgQuery.Native.parse_protobuf("SELECT * FROM users")
-      {:ok, <<...>>}
+      iex> {:ok, protobuf_bytes} = ExPgQuery.Native.parse_protobuf("SELECT * FROM users")
+      iex> is_binary(protobuf_bytes)
+      true
   """
   def parse_protobuf(_), do: exit(:nif_library_not_loaded)
 
@@ -54,8 +55,8 @@ defmodule ExPgQuery.Native do
     - `{:error, reason}` - Error with reason
 
   ## Examples
-      iex> proto = ExPgQuery.Native.parse_protobuf!("SELECT * FROM users")
-      iex> ExPgQuery.Native.deparse_protobuf(proto)
+      iex> {:ok, protobuf_bytes} = ExPgQuery.Native.parse_protobuf("SELECT * FROM users")
+      iex> ExPgQuery.Native.deparse_protobuf(protobuf_bytes)
       {:ok, "SELECT * FROM users"}
   """
   def deparse_protobuf(_), do: exit(:nif_library_not_loaded)
@@ -75,9 +76,9 @@ defmodule ExPgQuery.Native do
 
   ## Examples
       iex> ExPgQuery.Native.fingerprint("SELECT * FROM users WHERE id = 1")
-      {:ok, "418c5509e2202b89"}
+      {:ok, %{fingerprint: 11595314936444286341, fingerprint_str: "a0ead580058af585"}}
       iex> ExPgQuery.Native.fingerprint("SELECT * FROM users WHERE id = 2")
-      {:ok, "418c5509e2202b89"}
+      {:ok, %{fingerprint: 11595314936444286341, fingerprint_str: "a0ead580058af585"}}
   """
   def fingerprint(_), do: exit(:nif_library_not_loaded)
 
@@ -97,8 +98,9 @@ defmodule ExPgQuery.Native do
     - `{:error, reason}` - Error with reason
 
   ## Examples
-      iex> ExPgQuery.Native.scan("SELECT * FROM users")
-      {:ok, <<...>>}
+      iex> {:ok, protobuf_bytes} = ExPgQuery.Native.scan("SELECT * FROM users")
+      iex> is_binary(protobuf_bytes)
+      true
   """
   def scan(_), do: exit(:nif_library_not_loaded)
 end
