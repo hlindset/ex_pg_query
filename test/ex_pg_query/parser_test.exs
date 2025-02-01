@@ -974,41 +974,96 @@ defmodule ExPgQuery.ParserTest do
       assert_statement_types_eq(result, [:update_stmt])
     end
 
-    #   test "parses DELETE statements" do
-    #     {:ok, result} =
-    #       Parser.parse("""
-    #       WITH inactive_users AS (
-    #         SELECT id FROM users
-    #         WHERE last_login < NOW() - INTERVAL '1 year'
-    #       )
-    #       DELETE FROM user_data
-    #       USING inactive_users
-    #       WHERE user_data.user_id = inactive_users.id
-    #       RETURNING user_id
-    #       """)
+    test "parses DELETE statements" do
+      {:ok, result} =
+        Parser.parse("""
+        WITH inactive_users AS (
+          SELECT id FROM users
+          WHERE last_login < NOW() - INTERVAL '1 year'
+        )
+        DELETE FROM user_data
+        USING inactive_users
+        WHERE user_data.user_id = inactive_users.id
+        RETURNING user_id
+        """)
 
-    #     assert_select_tables_eq(result, ["user_data", "users"])
-    #     assert_cte_names_eq(result, ["inactive_users"])
-    #     assert_statement_types_eq(result, [:delete_stmt])
-    #   end
+      assert_tables_eq(result, ["user_data", "users"])
+      assert_dml_tables_eq(result, ["user_data"])
+      assert_select_tables_eq(result, ["users"])
+      assert_cte_names_eq(result, ["inactive_users"])
+      assert_statement_types_eq(result, [:delete_stmt])
+    end
 
-    #   test "parses MERGE statements" do
-    #     {:ok, result} =
-    #       Parser.parse("""
-    #       MERGE INTO customer_accounts ca
-    #       USING payment_transactions pt
-    #       ON ca.id = pt.account_id
-    #       WHEN MATCHED THEN
-    #         UPDATE SET balance = ca.balance + pt.amount
-    #       WHEN NOT MATCHED THEN
-    #         INSERT (id, balance) VALUES (pt.account_id, pt.amount)
-    #       """)
+    test "parses MERGE statements" do
+      {:ok, result} =
+        Parser.parse("""
+        MERGE INTO customer_accounts ca
+        USING payment_transactions pt
+        ON ca.id = pt.account_id
+        WHEN MATCHED THEN
+          UPDATE SET balance = ca.balance + pt.amount
+        WHEN NOT MATCHED THEN
+          INSERT (id, balance) VALUES (pt.account_id, pt.amount)
+        """)
 
-    #     assert_select_tables_eq(result, ["customer_accounts", "payment_transactions"])
-    #     assert_cte_names_eq(result, [])
-    #     assert result.table_aliases == ["ca", "pt"]
-    #     assert_statement_types_eq(result, [:merge_stmt])
-    #   end
+      assert_tables_eq(result, ["customer_accounts", "payment_transactions"])
+      assert_dml_tables_eq(result, ["customer_accounts"])
+      assert_select_tables_eq(result, ["payment_transactions"])
+      assert_cte_names_eq(result, [])
+
+      assert_table_aliases_eq(result, [
+        %{alias: "ca", location: 11, relation: "customer_accounts", schema: nil},
+        %{alias: "pt", location: 38, relation: "payment_transactions", schema: nil}
+      ])
+
+      expected_filters =
+        Enum.sort([
+          {"customer_accounts", "id"},
+          {"payment_transactions", "account_id"}
+        ])
+
+      assert Enum.sort(result.filter_columns) == expected_filters
+
+      assert_statement_types_eq(result, [:merge_stmt])
+    end
+
+    test "parses MERGE statements with multiple WHEN clauses with conditions" do
+      {:ok, result} =
+        Parser.parse("""
+        MERGE INTO wines w
+        USING wine_stock_changes s
+        ON s.winename = w.winename
+        WHEN NOT MATCHED AND s.stock_delta > 0 THEN
+          INSERT VALUES(s.winename, s.stock_delta)
+        WHEN MATCHED AND w.stock + s.stock_delta > 0 THEN
+          UPDATE SET stock = w.stock + s.stock_delta
+        WHEN MATCHED THEN
+          DELETE
+        RETURNING merge_action(), w.*;
+        """)
+
+      assert_tables_eq(result, ["wines", "wine_stock_changes"])
+      assert_dml_tables_eq(result, ["wines"])
+      assert_select_tables_eq(result, ["wine_stock_changes"])
+      assert_cte_names_eq(result, [])
+
+      assert_table_aliases_eq(result, [
+        %{alias: "w", location: 11, relation: "wines", schema: nil},
+        %{alias: "s", location: 25, relation: "wine_stock_changes", schema: nil}
+      ])
+
+      expected_filters =
+        Enum.sort([
+          {"wines", "winename"},
+          {"wine_stock_changes", "winename"},
+          {"wine_stock_changes", "stock_delta"},
+          {"wines", "stock"}
+        ])
+
+      assert Enum.sort(result.filter_columns) == expected_filters
+
+      assert_statement_types_eq(result, [:merge_stmt])
+    end
   end
 
   describe "parse/1 for DDL statements" do
@@ -1884,6 +1939,18 @@ defmodule ExPgQuery.ParserTest do
 
       # xxx: match_array
       assert_tables_eq(result, ["users", "other_users"])
+    end
+
+    test "finds insert from table" do
+      {:ok, result} =
+        Parser.parse("""
+          insert into users(pk, name) select * from other_users;
+        """)
+
+      # xxx: match_array
+      assert_tables_eq(result, ["users", "other_users"])
+      assert_select_tables_eq(result, ["other_users"])
+      assert_dml_tables_eq(result, ["users"])
     end
   end
 

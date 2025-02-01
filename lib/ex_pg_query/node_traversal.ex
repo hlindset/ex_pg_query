@@ -209,9 +209,6 @@ defmodule ExPgQuery.NodeTraversal do
     end)
   end
 
-  # Handles nil nodes by returning an empty list
-  defp traverse_node(nil, _ctx), do: []
-
   # Handles lists of nodes by mapping traverse_node over each element
   defp traverse_node(node_list, ctx) when is_list(node_list) do
     Enum.map(node_list, &traverse_node(&1, ctx))
@@ -276,6 +273,12 @@ defmodule ExPgQuery.NodeTraversal do
     %Ctx{ctx | cte_names: ctx.cte_names ++ cte_names}
   end
 
+  defp ctx_for_node(%PgQuery.MergeStmt{} = merge_stmt, ctx) do
+    table_aliases = collect_merge_aliases(merge_stmt)
+    cte_names = collect_cte_names(merge_stmt.with_clause)
+    %Ctx{ctx | table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
+  end
+
   defp ctx_for_node(%PgQuery.FuncCall{}, ctx) do
     %Ctx{ctx | type: :call}
   end
@@ -326,11 +329,20 @@ defmodule ExPgQuery.NodeTraversal do
     end
   end
 
-  # INSERT
-  defp ctx_for_field(%PgQuery.InsertStmt{}, field, ctx) do
+  # MERGE
+  defp ctx_for_field(%PgQuery.MergeStmt{}, field, ctx) do
     case field do
-      :from_clause -> %Ctx{ctx | type: :select, from_clause_item: true}
+      :join_condition -> %Ctx{ctx | condition_item: true}
       :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
+      :source_relation -> %Ctx{ctx | type: :select, from_clause_item: true}
+      _ -> ctx
+    end
+  end
+
+  # MERGE: WHEN clause condition
+  defp ctx_for_field(%PgQuery.MergeWhenClause{}, field, ctx) do
+    case field do
+      :condition -> %Ctx{ctx | condition_item: true}
       _ -> ctx
     end
   end
@@ -343,6 +355,10 @@ defmodule ExPgQuery.NodeTraversal do
       _ -> ctx
     end
   end
+
+  # INSERT
+  defp ctx_for_field(%PgQuery.InsertStmt{}, :relation, ctx),
+    do: %Ctx{ctx | type: :dml, from_clause_item: true}
 
   # CREATE TABLE
   defp ctx_for_field(%PgQuery.CreateStmt{}, :relation, ctx),
@@ -452,7 +468,16 @@ defmodule ExPgQuery.NodeTraversal do
     |> collect_from_clause_aliases(from_clause)
   end
 
-  defp collect_update_aliases(_update_stmt), do: %{}
+  # Collects aliases from a MERGE statement, combining the target relation
+  # and any additional source relation aliases
+  defp collect_merge_aliases(%PgQuery.MergeStmt{
+         relation: relation,
+         source_relation: source_relation
+       }) do
+    %{}
+    |> collect_rvar_aliases(relation)
+    |> collect_rvar_aliases(source_relation)
+  end
 
   # Processes a FROM clause to collect all table aliases, handling both
   # direct table references (range_var) and JOINs
@@ -491,6 +516,10 @@ defmodule ExPgQuery.NodeTraversal do
       location: location
     })
   end
+
+  # unwrap when wrapped in a PgQuery.Node
+  defp collect_rvar_aliases(aliases, %PgQuery.Node{node: {:range_var, rvar}}),
+    do: collect_rvar_aliases(aliases, rvar)
 
   defp collect_rvar_aliases(aliases, _rvar), do: aliases
 

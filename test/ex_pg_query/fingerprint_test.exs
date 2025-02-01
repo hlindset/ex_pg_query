@@ -22,7 +22,6 @@ defmodule ExPgQuery.FingerprintTest do
       end
     end
 
-
     test "works for basic cases" do
       assert Fingerprint.fingerprint("SELECT 1") == Fingerprint.fingerprint("SELECT 2")
       assert Fingerprint.fingerprint("SELECT  1") == Fingerprint.fingerprint("SELECT 2")
