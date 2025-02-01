@@ -326,15 +326,6 @@ defmodule ExPgQuery.NodeTraversal do
     end
   end
 
-  # INSERT
-  defp ctx_for_field(%PgQuery.InsertStmt{}, field, ctx) do
-    case field do
-      :from_clause -> %Ctx{ctx | type: :select, from_clause_item: true}
-      :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
-      _ -> ctx
-    end
-  end
-
   # CREATE INDEX
   defp ctx_for_field(%PgQuery.IndexStmt{}, field, ctx) do
     case field do
@@ -343,6 +334,10 @@ defmodule ExPgQuery.NodeTraversal do
       _ -> ctx
     end
   end
+
+  # INSERT
+  defp ctx_for_field(%PgQuery.InsertStmt{}, :relation, ctx), do:
+    %Ctx{ctx | type: :dml, from_clause_item: true}
 
   # CREATE TABLE
   defp ctx_for_field(%PgQuery.CreateStmt{}, :relation, ctx),
@@ -451,8 +446,6 @@ defmodule ExPgQuery.NodeTraversal do
     |> collect_rvar_aliases(relation)
     |> collect_from_clause_aliases(from_clause)
   end
-
-  defp collect_update_aliases(_update_stmt), do: %{}
 
   # Processes a FROM clause to collect all table aliases, handling both
   # direct table references (range_var) and JOINs

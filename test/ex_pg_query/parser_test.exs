@@ -1885,6 +1885,18 @@ defmodule ExPgQuery.ParserTest do
       # xxx: match_array
       assert_tables_eq(result, ["users", "other_users"])
     end
+
+    test "finds insert from table" do
+      {:ok, result} =
+        Parser.parse("""
+          insert into users(pk, name) select * from other_users;
+        """) |> dbg(limit: :infinity, printable_limit: :infinity)
+
+      # xxx: match_array
+      assert_tables_eq(result, ["users", "other_users"])
+      assert_select_tables_eq(result, ["other_users"])
+      assert_dml_tables_eq(result, ["users"])
+    end
   end
 
   describe "parsing UPDATE" do
