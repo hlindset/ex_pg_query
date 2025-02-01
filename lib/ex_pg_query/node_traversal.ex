@@ -209,9 +209,6 @@ defmodule ExPgQuery.NodeTraversal do
     end)
   end
 
-  # Handles nil nodes by returning an empty list
-  defp traverse_node(nil, _ctx), do: []
-
   # Handles lists of nodes by mapping traverse_node over each element
   defp traverse_node(node_list, ctx) when is_list(node_list) do
     Enum.map(node_list, &traverse_node(&1, ctx))
