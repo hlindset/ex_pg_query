@@ -16,7 +16,8 @@ defmodule ExPgQuery.MixProject do
         "coveralls.html": :test,
         "coveralls.json": :test,
         "coveralls.lcov": :test,
-        "coveralls.cobertura": :test
+        "coveralls.cobertura": :test,
+        "test.watch": :test
       ],
       compilers: [:elixir_make] ++ Mix.compilers()
     ]
@@ -33,9 +34,10 @@ defmodule ExPgQuery.MixProject do
   defp deps do
     [
       {:protox, "~> 1.7"},
+      {:elixir_make, "~> 0.9", runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:junit_formatter, "~> 3.4", only: :test},
-      {:elixir_make, "~> 0.9", runtime: false}
+      {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false}
     ]
   end
 end
