@@ -305,6 +305,25 @@ defmodule ExPgQuery.Parser do
       |> Enum.uniq()
 
   @doc """
+  Returns a list of column references used in filter conditions (WHERE clauses) from the query.
+
+  Each column reference is returned as a tuple of {table_name, column_name}, where table_name
+  can be nil if the column reference doesn't specify a table.
+
+  ## Examples
+
+      iex> {:ok, result} = ExPgQuery.Parser.parse("SELECT * FROM users WHERE users.id = 1")
+      iex> ExPgQuery.Parser.filter_columns(result)
+      [{"users", "id"}]
+
+      iex> {:ok, result} = ExPgQuery.Parser.parse("SELECT * FROM users WHERE name = 'John'")
+      iex> ExPgQuery.Parser.filter_columns(result)
+      [{nil, "name"}]
+  """
+  def filter_columns(%Result{filter_columns: filter_columns}),
+    do: filter_columns
+
+  @doc """
   Returns a list of statement types found in the parsed query results.
   """
   def statement_types(%Result{protobuf: %PgQuery.ParseResult{stmts: stmts}}) do

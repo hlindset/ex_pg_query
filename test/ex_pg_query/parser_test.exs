@@ -569,19 +569,16 @@ defmodule ExPgQuery.ParserTest do
             )
         """)
 
-      expected_filters =
-        Enum.sort([
-          {nil, "id"},
-          {"users", "created_at"},
-          {"users", "id"},
-          {"users", "org_id"},
-          {"users", "status"},
-          {"user_roles", "role"},
-          {"user_roles", "user_id"},
-          {nil, "tier"}
-        ])
-
-      assert Enum.sort(result.filter_columns) == expected_filters
+      assert_filter_columns_eq(result, [
+        {nil, "id"},
+        {"users", "created_at"},
+        {"users", "id"},
+        {"users", "org_id"},
+        {"users", "status"},
+        {"user_roles", "role"},
+        {"user_roles", "user_id"},
+        {nil, "tier"}
+      ])
     end
 
     test "extracts aliases" do
@@ -1016,13 +1013,10 @@ defmodule ExPgQuery.ParserTest do
         %{alias: "pt", location: 38, relation: "payment_transactions", schema: nil}
       ])
 
-      expected_filters =
-        Enum.sort([
-          {"customer_accounts", "id"},
-          {"payment_transactions", "account_id"}
-        ])
-
-      assert Enum.sort(result.filter_columns) == expected_filters
+      assert_filter_columns_eq(result, [
+        {"customer_accounts", "id"},
+        {"payment_transactions", "account_id"}
+      ])
 
       assert_statement_types_eq(result, [:merge_stmt])
     end
@@ -1052,15 +1046,12 @@ defmodule ExPgQuery.ParserTest do
         %{alias: "s", location: 25, relation: "wine_stock_changes", schema: nil}
       ])
 
-      expected_filters =
-        Enum.sort([
-          {"wines", "winename"},
-          {"wine_stock_changes", "winename"},
-          {"wine_stock_changes", "stock_delta"},
-          {"wines", "stock"}
-        ])
-
-      assert Enum.sort(result.filter_columns) == expected_filters
+      assert_filter_columns_eq(result, [
+        {"wines", "winename"},
+        {"wine_stock_changes", "winename"},
+        {"wine_stock_changes", "stock_delta"},
+        {"wines", "stock"}
+      ])
 
       assert_statement_types_eq(result, [:merge_stmt])
     end
@@ -2230,7 +2221,7 @@ defmodule ExPgQuery.ParserTest do
   end
 
   defp assert_filter_columns_eq(result, expected) do
-    assert Enum.sort(result.filter_columns) == Enum.sort(expected)
+    assert Enum.sort(Parser.filter_columns(result)) == Enum.sort(expected)
   end
 
   defp assert_cte_names_eq(result, expected) do
