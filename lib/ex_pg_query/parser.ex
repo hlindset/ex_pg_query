@@ -1,13 +1,42 @@
 defmodule ExPgQuery.Parser do
   @moduledoc """
-  Represents the result of parsing a SQL query, providing analysis of tables,
-  functions, CTEs, and aliases found in the query.
+  Provides functionality for parsing PostgreSQL SQL queries and analyzing their structure.
+
+  This module parses SQL queries and extracts detailed information about the tables,
+  functions, CTEs (Common Table Expressions), aliases, and filter columns referenced
+  within them. It supports analysis of different types of SQL statements including
+  SELECT, DDL (Data Definition Language), and DML (Data Manipulation Language) operations.
+
+  ## Examples
+
+      iex> {:ok, result} = ExPgQuery.Parser.parse("SELECT * FROM users WHERE users.id = 1")
+      iex> ExPgQuery.Parser.tables(result)
+      ["users"]
+      iex> ExPgQuery.Parser.filter_columns(result)
+      [{"users", "id"}]
+
+      iex> {:ok, result} = ExPgQuery.Parser.parse("DROP FUNCTION add(a integer, b integer)")
+      iex> ExPgQuery.Parser.ddl_functions(result)
+      ["add"]
+
+  The parser provides detailed analysis of:
+  - Tables referenced in queries
+  - Function calls and definitions
+  - Common Table Expressions (CTEs)
+  - Table aliases
+  - Filter columns used in WHERE clauses
+  - Statement types
   """
 
   alias ExPgQuery.NodeTraversal
   alias ExPgQuery.NodeTraversal.Ctx
 
   defmodule Result do
+    @moduledoc """
+    Represents the result of parsing a SQL query, providing analysis of tables,
+    functions, CTEs, and aliases found in the query.
+    """
+
     defstruct protobuf: nil,
               tables: [],
               table_aliases: [],
