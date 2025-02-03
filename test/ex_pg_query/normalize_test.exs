@@ -8,12 +8,16 @@ defmodule ExPgQuery.NormalizeTest do
     end
 
     test "normalizes IN(...)" do
-      {:ok, result} = ExPgQuery.normalize("SELECT 1 FROM x WHERE y = 12561 AND z = '124' AND b IN (1, 2, 3)")
+      {:ok, result} =
+        ExPgQuery.normalize("SELECT 1 FROM x WHERE y = 12561 AND z = '124' AND b IN (1, 2, 3)")
+
       assert result == "SELECT $1 FROM x WHERE y = $2 AND z = $3 AND b IN ($4, $5, $6)"
     end
 
     test "normalizes subselects" do
-      {:ok, result} = ExPgQuery.normalize("SELECT 1 FROM x WHERE y = (SELECT 123 FROM a WHERE z = 'bla')")
+      {:ok, result} =
+        ExPgQuery.normalize("SELECT 1 FROM x WHERE y = (SELECT 123 FROM a WHERE z = 'bla')")
+
       assert result == "SELECT $1 FROM x WHERE y = (SELECT $2 FROM a WHERE z = $3)"
     end
 
@@ -42,7 +46,9 @@ defmodule ExPgQuery.NormalizeTest do
     end
 
     test "normalizes COPY" do
-      {:ok, result} = ExPgQuery.normalize("COPY (SELECT * FROM t WHERE id IN ('1', '2')) TO STDOUT")
+      {:ok, result} =
+        ExPgQuery.normalize("COPY (SELECT * FROM t WHERE id IN ('1', '2')) TO STDOUT")
+
       assert result == "COPY (SELECT * FROM t WHERE id IN ($1, $2)) TO STDOUT"
     end
 
@@ -67,7 +73,9 @@ defmodule ExPgQuery.NormalizeTest do
     end
 
     test "normalizes DECLARE CURSOR" do
-      {:ok, result} = ExPgQuery.normalize("DECLARE cursor_b CURSOR FOR SELECT * FROM databases WHERE id = 23")
+      {:ok, result} =
+        ExPgQuery.normalize("DECLARE cursor_b CURSOR FOR SELECT * FROM databases WHERE id = 23")
+
       assert result == "DECLARE cursor_b CURSOR FOR SELECT * FROM databases WHERE id = $1"
     end
   end
