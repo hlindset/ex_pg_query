@@ -16,6 +16,12 @@ defmodule ExPgQuery.Parser do
               filter_columns: []
   end
 
+  @doc """
+  Parses a SQL query and returns detailed information about its structure.
+
+  Returns `{:ok, %Result{}}` containing analysis of tables, functions, CTEs,
+  aliases and filter columns found in the query.
+  """
   def parse(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
          {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
@@ -229,9 +235,17 @@ defmodule ExPgQuery.Parser do
   defp alias_to_name(%{relation: relation, schema: nil}), do: relation
   defp alias_to_name(%{relation: relation, schema: schema}), do: "#{schema}.#{relation}"
 
+  @doc """
+  Returns a unique list of all table names referenced in the query results,
+  regardless of operation type (SELECT, DDL, DML).
+  """
   def tables(%Result{tables: tables}),
     do: Enum.map(tables, & &1.name) |> Enum.uniq()
 
+  @doc """
+  Returns a unique list of table names that appear in SELECT operations
+  within the query results.
+  """
   def select_tables(%Result{tables: tables}),
     do:
       tables
@@ -239,6 +253,10 @@ defmodule ExPgQuery.Parser do
       |> Enum.map(& &1.name)
       |> Enum.uniq()
 
+  @doc """
+  Returns a unique list of table names that appear in DDL operations
+  within the query results.
+  """
   def ddl_tables(%Result{tables: tables}),
     do:
       tables
@@ -246,6 +264,10 @@ defmodule ExPgQuery.Parser do
       |> Enum.map(& &1.name)
       |> Enum.uniq()
 
+  @doc """
+  Returns a unique list of table names that appear in DML operations
+  within the query results.
+  """
   def dml_tables(%Result{tables: tables}),
     do:
       tables
@@ -253,9 +275,17 @@ defmodule ExPgQuery.Parser do
       |> Enum.map(& &1.name)
       |> Enum.uniq()
 
+  @doc """
+  Returns a unique list of all function names referenced in the query results,
+  regardless of operation type (CALL, DDL).
+  """
   def functions(%Result{functions: functions}),
     do: Enum.map(functions, & &1.name) |> Enum.uniq()
 
+  @doc """
+  Returns a unique list of function names that are called (invoked)
+  within the query results.
+  """
   def call_functions(%Result{functions: functions}),
     do:
       functions
@@ -263,6 +293,10 @@ defmodule ExPgQuery.Parser do
       |> Enum.map(& &1.name)
       |> Enum.uniq()
 
+  @doc """
+  Returns a unique list of function names that appear in DDL (Data Definition Language)
+  operations within the query results.
+  """
   def ddl_functions(%Result{functions: functions}),
     do:
       functions
@@ -270,6 +304,9 @@ defmodule ExPgQuery.Parser do
       |> Enum.map(& &1.name)
       |> Enum.uniq()
 
+  @doc """
+  Returns a list of statement types found in the parsed query results.
+  """
   def statement_types(%Result{protobuf: %PgQuery.ParseResult{stmts: stmts}}) do
     Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {stmt_type, _}}} ->
       stmt_type
