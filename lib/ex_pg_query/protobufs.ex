@@ -1,6 +1,5 @@
 defmodule ExPgQuery.Protobufs do
   use Protox,
-    files: [
-      "./libpg_query/protobuf/pg_query.proto"
-    ]
+    files: ["./libpg_query/protobuf/pg_query.proto"],
+    keep_unknown_fields: false
 end
