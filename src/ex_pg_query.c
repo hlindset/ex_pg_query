@@ -362,6 +362,61 @@ static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
 }
 
 /**
+ * Normalizes a SQL query by replacing literals with placeholders
+ *
+ * Takes a SQL query string and returns a normalized version where literals
+ * are replaced with parameters (e.g., $1, $2, etc.)
+ *
+ * @param env The NIF environment
+ * @param argc Number of arguments
+ * @param argv Array of arguments - expects one binary argument containing SQL
+ * @return ERL_NIF_TERM {:ok, normalized_sql_binary} | {:error, reason}
+ */
+static ERL_NIF_TERM normalize(ErlNifEnv *env, int argc,
+                              const ERL_NIF_TERM argv[]) {
+  ErlNifBinary query_binary;
+  ERL_NIF_TERM error_term;
+
+  DEBUG_LOG("Starting normalize");
+
+  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+    return error_term;
+  }
+
+  // Create null-terminated string from input
+  char *query_str = (char *)malloc(query_binary.size + 1);
+  if (query_str == NULL) {
+    DEBUG_LOG("Memory allocation failed for query string");
+    return make_error(env, "memory allocation failed");
+  }
+
+  memcpy(query_str, query_binary.data, query_binary.size);
+  query_str[query_binary.size] = '\0';
+
+  // Normalize the query
+  DEBUG_LOG("Normalizing query of size %zu", query_binary.size);
+  PgQueryNormalizeResult result = pg_query_normalize(query_str);
+  free(query_str);
+
+  if (result.error != NULL) {
+    DEBUG_LOG("Normalize error: %s", result.error->message);
+    ERL_NIF_TERM error_term = make_error(env, result.error->message);
+    pg_query_free_normalize_result(result);
+    return error_term;
+  }
+
+  // Create success term with the normalized query
+  DEBUG_LOG("Normalize successful");
+  ERL_NIF_TERM ok_term =
+      make_success(env, (unsigned char *)result.normalized_query,
+                   strlen(result.normalized_query));
+
+  // Free the normalize result
+  pg_query_free_normalize_result(result);
+  return ok_term;
+}
+
+/**
  * ExPgQuery NIF Implementation
  *
  * This module provides NIFs for PostgreSQL query parsing, deparsing,
@@ -380,6 +435,7 @@ static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
 static ErlNifFunc funcs[] = {{"parse_protobuf", 1, parse_protobuf},
                              {"deparse_protobuf", 1, deparse_protobuf},
                              {"scan", 1, scan},
-                             {"fingerprint", 1, fingerprint}};
+                             {"fingerprint", 1, fingerprint},
+                             {"normalize", 1, normalize}};
 
 ERL_NIF_INIT(Elixir.ExPgQuery.Native, funcs, NULL, NULL, NULL, NULL)
