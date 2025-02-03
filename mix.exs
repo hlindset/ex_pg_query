@@ -19,7 +19,18 @@ defmodule ExPgQuery.MixProject do
         "coveralls.cobertura": :test,
         "test.watch": :test
       ],
-      compilers: [:elixir_make] ++ Mix.compilers()
+      compilers: [:elixir_make] ++ Mix.compilers(),
+      # Docs
+      name: "ExPgQuery",
+      source_url: "https://github.com/hlindset/ex_pg_query",
+      docs: &docs/0
+    ]
+  end
+
+  defp docs do
+    [
+      main: "ExPgQuery", # The main page in the docs
+      extras: ["README.md"]
     ]
   end
 
@@ -35,6 +46,7 @@ defmodule ExPgQuery.MixProject do
     [
       {:protox, "~> 1.7"},
       {:elixir_make, "~> 0.9", runtime: false},
+      {:ex_doc, "~> 0.36", only: :dev, runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:junit_formatter, "~> 3.4", only: :test},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false}
