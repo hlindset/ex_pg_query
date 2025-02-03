@@ -1,0 +1,2 @@
+ignore:
+  - lib/ex_pg_query/native.ex
