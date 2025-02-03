@@ -1,4 +1,4 @@
-defmodule ExPgQueryProtobufs do
+defmodule ExPgQuery.Protobufs do
   use Protox,
     files: [
       "./libpg_query/protobuf/pg_query.proto"
