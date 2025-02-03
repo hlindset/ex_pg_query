@@ -23,7 +23,7 @@ defmodule ExPgQuery.TreeWalker do
     * `callback` - A function that receives four arguments:
       * The parent node
       * The field name or index
-      * A tuple of {current_node, location}
+      * A tuple of `{current_node, location}`
       * The current accumulator value
 
   ## Returns
