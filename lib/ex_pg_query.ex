@@ -67,6 +67,13 @@ defmodule ExPgQuery do
     end
   end
 
+  def fingerprint(sql) do
+    case ExPgQuery.Native.fingerprint(sql) do
+      {:ok, %{fingerprint_str: fingerprint}} -> {:ok, fingerprint}
+      {:error, _reason} = err -> err
+    end
+  end
+
   @doc """
   Normalizes a SQL query by replacing literal values with placeholders.
 
