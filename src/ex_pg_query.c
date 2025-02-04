@@ -56,6 +56,37 @@ static ERL_NIF_TERM make_success(ErlNifEnv *env, const unsigned char *data,
 }
 
 /**
+ * Allocates a null-terminated string from a binary input using enif_alloc.
+ * Caller must use enif_free to deallocate the returned string.
+ *
+ * @param binary The input binary to convert
+ * @param error_term Output parameter for error term if allocation fails
+ * @param env The NIF environment
+ * @return char* Null-terminated string or NULL if allocation fails
+ */
+static char *mk_cstr(const ErlNifBinary *binary, ERL_NIF_TERM *error_term,
+                     ErlNifEnv *env) {
+  // Check for overflow in size calculation
+  if (binary->size >= SIZE_MAX - 1) {
+    *error_term = make_error(env, "input size too large");
+    return NULL;
+  }
+
+  char *str = enif_alloc(binary->size + 1);
+  if (str == NULL) {
+    DEBUG_LOG("Memory allocation failed for string of size %zu",
+              binary->size + 1);
+    *error_term = make_error(env, "memory allocation failed");
+    return NULL;
+  }
+
+  memcpy(str, binary->data, binary->size);
+  str[binary->size] = '\0';
+
+  return str;
+}
+
+/**
  * Validates NIF arguments ensuring proper arity and binary input
  *
  * @param env The NIF environment
@@ -211,15 +242,11 @@ static ERL_NIF_TERM parse_protobuf(ErlNifEnv *env, int argc,
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)enif_alloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Parse the query
   DEBUG_LOG("Parsing query of size %zu", query_binary.size);
@@ -267,15 +294,11 @@ static ERL_NIF_TERM fingerprint(ErlNifEnv *env, int argc,
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)enif_alloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Calculate fingerprint
   DEBUG_LOG("Calculating fingerprint for query of size %zu", query_binary.size);
@@ -346,15 +369,11 @@ static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)enif_alloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Scan the query
   DEBUG_LOG("Scanning query of size %zu", query_binary.size);
@@ -401,15 +420,11 @@ static ERL_NIF_TERM normalize(ErlNifEnv *env, int argc,
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)enif_alloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Normalize the query
   DEBUG_LOG("Normalizing query of size %zu", query_binary.size);
