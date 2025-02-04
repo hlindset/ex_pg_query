@@ -116,7 +116,7 @@ static bool validate_args(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[],
   }
 
   if (input_binary->size > max_length) {
-    *error_term = make_error(env, "input too large (max 16MB)");
+    *error_term = make_error(env, "input too large");
     return false;
   }
 
