@@ -18,7 +18,8 @@ defmodule ExPgQuery.FingerprintTest do
     end
 
     test "returns error on invalid query" do
-      assert {:error, "syntax error at or near \"sellect\""} == Fingerprint.fingerprint("sellect 1")
+      assert {:error, "syntax error at or near \"sellect\""} ==
+               Fingerprint.fingerprint("sellect 1")
     end
 
     test "works for basic cases" do

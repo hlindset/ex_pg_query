@@ -11,25 +11,20 @@ defmodule ExPgQuery.NormalizeTest do
       assert result == "SELECT $1"
     end
 
-
     test "returns error on invalid query" do
       assert {:error, "syntax error at or near \"sellect\""} == Normalize.normalize("sellect 1")
     end
 
     test "normalizes IN(...)" do
       {:ok, result} =
-        Normalize.normalize(
-          "SELECT 1 FROM x WHERE y = 12561 AND z = '124' AND b IN (1, 2, 3)"
-        )
+        Normalize.normalize("SELECT 1 FROM x WHERE y = 12561 AND z = '124' AND b IN (1, 2, 3)")
 
       assert result == "SELECT $1 FROM x WHERE y = $2 AND z = $3 AND b IN ($4, $5, $6)"
     end
 
     test "normalizes subselects" do
       {:ok, result} =
-        Normalize.normalize(
-          "SELECT 1 FROM x WHERE y = (SELECT 123 FROM a WHERE z = 'bla')"
-        )
+        Normalize.normalize("SELECT 1 FROM x WHERE y = (SELECT 123 FROM a WHERE z = 'bla')")
 
       assert result == "SELECT $1 FROM x WHERE y = (SELECT $2 FROM a WHERE z = $3)"
     end
@@ -91,9 +86,7 @@ defmodule ExPgQuery.NormalizeTest do
 
     test "normalizes DECLARE CURSOR" do
       {:ok, result} =
-        Normalize.normalize(
-          "DECLARE cursor_b CURSOR FOR SELECT * FROM databases WHERE id = 23"
-        )
+        Normalize.normalize("DECLARE cursor_b CURSOR FOR SELECT * FROM databases WHERE id = 23")
 
       assert result == "DECLARE cursor_b CURSOR FOR SELECT * FROM databases WHERE id = $1"
     end

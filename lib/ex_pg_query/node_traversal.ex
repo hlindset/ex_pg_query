@@ -2,25 +2,21 @@ defmodule ExPgQuery.NodeTraversal do
   @moduledoc """
   Recursively traverses a PostgreSQL AST to extract nodes and their context.
 
-  This module provides functionality to walk through a parsed PostgreSQL query tree,
-  collecting each node along with contextual information about where it appears in
-  the query structure. It handles:
-
-  - Statement type classification (SELECT, DML, DDL, CALL)
-  - Table alias tracking
-  - CTE (Common Table Expression) tracking
-  - Subquery context management
-  - Clause-specific context (FROM, WHERE, etc.)
+  Provides functionality to walk through a parsed PostgreSQL query tree,
+  collecting each node along with contextual information.
   """
 
-  # Maps PostgreSQL statement types to their general categories.
   #
-  # Categories are:
-  # - :select - SELECT statements
-  # - :dml - Data Manipulation (INSERT, UPDATE, DELETE, etc.)
-  # - :ddl - Data Definition (CREATE, ALTER, DROP, etc.)
-  # - :call - Procedure calls and similar execution statements
-  # - :none - Utility and other statements
+  # Maps root PostgreSQL statement types to their general categories.
+  #
+  # ## Categories
+  #
+  #   * :select - SELECT statements
+  #   * :dml - Data Manipulation (INSERT, UPDATE, DELETE, etc.)
+  #   * :ddl - Data Definition (CREATE, ALTER, DROP, etc.)
+  #   * :call - Procedure calls and similar execution statements
+  #   * :none - Utility and other statements
+  #
   @default_node_type %{
     # SELECT statements
     PgQuery.SelectStmt => :select,
@@ -149,14 +145,15 @@ defmodule ExPgQuery.NodeTraversal do
 
     ## Fields
 
-    * `type` - The type of statement (:none, :select, :dml, :ddl, :call)
-    * `current_cte` - Name of the CTE currently being processed
-    * `is_recursive_cte` - Boolean indicating if current CTE is recursive
-    * `subselect_item` - Boolean indicating if node is part of a subselect
-    * `from_clause_item` - Boolean indicating if node is in a FROM clause
-    * `condition_item` - Boolean indicating if node is in a condition (WHERE, JOIN ON, etc.)
-    * `table_aliases` - Map of table aliases to their details in the current scope
-    * `cte_names` - List of CTE names defined
+      * `type` - Statement type (:none, :select, :dml, :ddl, :call)
+      * `current_cte` - Name of the CTE being processed
+      * `is_recursive_cte` - Whether current CTE is recursive
+      * `subselect_item` - Whether node is part of a subselect
+      * `from_clause_item` - Whether node is in a FROM clause
+      * `condition_item` - Whether node is in a condition (WHERE, JOIN ON, etc.)
+      * `table_aliases` - Map of table aliases to their details in current scope
+      * `cte_names` - List of defined CTE names
+
     """
     @type stmt_type :: :none | :select | :dml | :ddl | :call
 
@@ -170,7 +167,17 @@ defmodule ExPgQuery.NodeTraversal do
               cte_names: []
   end
 
-  # Gets the default statement type for a node
+  #
+  # Gets the default statement type for a node.
+  #
+  # ## Parameters
+  #
+  # * `node` - AST node to check
+  #
+  # ## Returns
+  #
+  # * Statement type (`:none` if not recognized)
+  #
   defp default_node_type(node) when is_struct(node) do
     Map.get(@default_node_type, node.__struct__, :none)
   end
@@ -180,23 +187,21 @@ defmodule ExPgQuery.NodeTraversal do
   @doc """
   Traverses a ParseResult tree and returns a list of nodes with their context.
 
-  Processes each statement in the parse result, building up context information as it
-  traverses the tree. This includes tracking table aliases, CTEs, and statement types.
-
   ## Parameters
 
-    * `parse_result` - A PgQuery.ParseResult struct containing the parsed query
+    * `parse_result` - PgQuery.ParseResult struct containing the parsed query
 
   ## Returns
 
-    List of {node, context} tuples where:
-    * `node` is the AST node
-    * `context` is a Ctx struct containing contextual information
+    * List of `{node, context}` tuples where:
+      * `node` - AST node
+      * `context` - Ctx struct with contextual information
 
   ## Example
 
       iex> {:ok, tree} = ExPgQuery.Protobuf.from_sql("SELECT * FROM users")
       iex> ExPgQuery.NodeTraversal.nodes(tree)
+
   """
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
     Enum.flat_map(stmts, fn

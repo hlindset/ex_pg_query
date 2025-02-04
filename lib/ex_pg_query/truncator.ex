@@ -1,17 +1,16 @@
 defmodule ExPgQuery.Truncator do
   @moduledoc """
-  Provides functionality to intelligently truncate SQL queries while maintaining valid syntax.
+  Provides functionality to intelligently truncate SQL queries.
 
-  This module implements a smart truncation algorithm that:
-  1. Identifies parts of the query that can be safely truncated
-  2. Prioritizes truncating less important parts (WHERE clauses, value lists, etc.)
-  3. Falls back to simple string truncation if smart truncation isn't sufficient
+  Falls back to simple string truncation if smart truncation isn't sufficient.
 
-  Example:
+  ## Example
+
       iex> long_query = "SELECT very, many, columns, that, make, query, too, long FROM a_table"
       iex> {:ok, protobuf} = ExPgQuery.Protobuf.from_sql(long_query)
       iex> ExPgQuery.Truncator.truncate(protobuf, 30)
       {:ok, "SELECT ... FROM a_table"}
+
   """
 
   alias ExPgQuery.TreeWalker
@@ -22,11 +21,13 @@ defmodule ExPgQuery.Truncator do
     @moduledoc """
     Represents a location in the query that could be truncated.
 
-    Fields:
-      * `:parent_node` - The AST node that contains the truncatable element
-      * `:location` - Path to the truncatable element in the AST
-      * `:node_type` - Type of the node (`:target_list`, `:where_clause`, etc.)
-      * `:length` - Length of the text representation of this element
+    ## Fields
+
+      * `parent_node` - The AST node that contains the truncatable element
+      * `location` - Path to the truncatable element in the AST
+      * `node_type` - Type of the node (`:target_list`, `:where_clause`, etc.)
+      * `length` - Length of the text representation of this element
+
     """
     defstruct [:parent_node, :location, :node_type, :length]
   end
@@ -79,21 +80,26 @@ defmodule ExPgQuery.Truncator do
   @doc """
   Truncates a SQL query to be below the specified length.
 
-  Attempts smart truncation of specific query parts before falling back to hard truncation.
+  Attempts smart truncation of specific query parts before falling back to
+  hard truncation.
 
   ## Parameters
+
     * `tree` - A `PgQuery.ParseResult` struct containing the parsed query
     * `max_length` - Maximum allowed length of the output string
 
   ## Returns
+
     * `{:ok, string}` - Successfully truncated query
     * `{:error, reason}` - Error during truncation
 
   ## Examples
+
       iex> query = "SELECT * FROM users WHERE name = 'very long name'"
       iex> {:ok, tree} = ExPgQuery.Protobuf.from_sql(query)
       iex> ExPgQuery.Truncator.truncate(tree, 30)
       {:ok, "SELECT * FROM users WHERE ..."}
+
   """
   def truncate(%PgQuery.ParseResult{} = tree, max_length) do
     with {:ok, {length, output}} <- query_length(tree) do
@@ -109,14 +115,18 @@ defmodule ExPgQuery.Truncator do
   Same as `truncate/2` but raises on error.
 
   ## Parameters
+
     * `tree` - A `PgQuery.ParseResult` struct containing the parsed query
     * `max_length` - Maximum allowed length of the output string
 
   ## Returns
+
     * `string` - Successfully truncated query
 
   ## Raises
+
     * RuntimeError if truncation fails
+
   """
   def truncate!(tree, max_length) do
     case truncate(tree, max_length) do

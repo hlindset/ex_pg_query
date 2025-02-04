@@ -1,17 +1,6 @@
 defmodule ExPgQuery.TreeUtils do
   @moduledoc """
-  Utilities for working with PgQuery Protobuf structures.
-
-  This module provides functions for safely traversing and updating nested Protobuf
-  structures generated from PostgreSQL queries. It handles:
-
-  - Nested map structures
-  - List elements
-  - PgQuery.Node types
-  - Oneof fields
-  - Error propagation
-
-  All operations are safe and return either {:ok, result} or {:error, reason}.
+  Utilities for safely traversing and updating nested PgQuery AST structures.
   """
 
   @doc """
@@ -25,7 +14,7 @@ defmodule ExPgQuery.TreeUtils do
 
   ## Returns
 
-    * `{:ok, updated_tree}` on success
+    * `{:ok, tree}` on success
     * `{:error, reason}` on failure
 
   ## Examples
@@ -37,6 +26,7 @@ defmodule ExPgQuery.TreeUtils do
       iex> tree = %{items: [1, 2, 3]}
       iex> TreeUtils.update_in_tree(tree, [:items, 1], fn _ -> 99 end)
       {:ok, %{items: [1, 99, 3]}}
+
   """
   def update_in_tree(tree, [], update_fn) when is_function(update_fn) do
     {:ok, update_fn.(tree)}
@@ -87,7 +77,7 @@ defmodule ExPgQuery.TreeUtils do
   end
 
   @doc """
-  Bang version of update_in_tree/3 that raises an error on failure.
+  Similar to update_in_tree/3 but raises on error.
 
   ## Parameters
 
@@ -112,6 +102,7 @@ defmodule ExPgQuery.TreeUtils do
       iex> tree = %{a: 1}
       iex> TreeUtils.update_in_tree!(tree, [:b], fn _ -> 2 end)
       ** (RuntimeError) Update error: "key b not found"
+
   """
   def update_in_tree!(tree, path, update_fn) do
     case update_in_tree(tree, path, update_fn) do
@@ -123,8 +114,7 @@ defmodule ExPgQuery.TreeUtils do
   @doc """
   Convenience function for setting a value directly in a nested structure.
 
-  This is a wrapper around update_in_tree/3 that simplifies the common case of
-  simply wanting to set a value rather than transform it with a function.
+  This is a wrapper around `update_in_tree/3`.
 
   ## Parameters
 
@@ -134,7 +124,7 @@ defmodule ExPgQuery.TreeUtils do
 
   ## Returns
 
-    * `{:ok, updated_tree}` on success
+    * `{:ok, tree}` on success
     * `{:error, reason}` on failure
 
   ## Examples
@@ -146,6 +136,7 @@ defmodule ExPgQuery.TreeUtils do
       iex> tree = %{a: %{b: 1}}
       iex> TreeUtils.put_in_tree(tree, [:a, :b], 2)
       {:ok, %{a: %{b: 2}}}
+
   """
   def put_in_tree(tree, path, value) do
     update_in_tree(tree, path, fn _old -> value end)
