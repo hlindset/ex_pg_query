@@ -33,6 +33,7 @@ defmodule ExPgQuery do
 
   """
 
+  alias ExPgQuery.Truncator
   alias ExPgQuery.NodeTraversal
   alias ExPgQuery.NodeTraversal.Ctx
 
@@ -535,5 +536,33 @@ defmodule ExPgQuery do
     Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {stmt_type, _}}} ->
       stmt_type
     end)
+  end
+
+  @doc """
+  Truncates query to be below the specified length.
+
+  Attempts smart truncation of specific query parts before falling back to
+  hard truncation.
+
+  ## Parameters
+
+    * `parse_result` - A `ExPgQuery.ParseResult` struct containing the parsed query
+    * `max_length` - Maximum allowed length of the output string
+
+  ## Returns
+
+    * `{:ok, string}` - Successfully truncated query
+    * `{:error, reason}` - Error during truncation
+
+  ## Examples
+
+      iex> query = "SELECT * FROM users WHERE name = 'very long name'"
+      iex> {:ok, parse_result} = ExPgQuery.parse(query)
+      iex> ExPgQuery.truncate(parse_result, 30)
+      {:ok, "SELECT * FROM users WHERE ..."}
+
+  """
+  def truncate(%ParseResult{} = parse_result, max_length) do
+    Truncator.truncate(parse_result.tree, max_length)
   end
 end
