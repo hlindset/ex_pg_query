@@ -7,6 +7,8 @@
 #include "../libpg_query/protobuf/pg_query.pb-c.h"
 #include "../libpg_query/vendor/protobuf-c/protobuf-c.h"
 
+#define MAX_QUERY_LENGTH (16 * 1024 * 1024)
+
 // Debug logging macro - can be enabled/disabled via compilation flag
 #ifdef DEBUG_LOGGING
 #define DEBUG_LOG(fmt, ...) fprintf(stderr, "DEBUG: " fmt "\n", ##__VA_ARGS__)
@@ -73,6 +75,11 @@ static bool validate_args(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[],
 
   if (!enif_inspect_binary(env, argv[0], input_binary)) {
     *error_term = make_error(env, "failed to inspect binary input");
+    return false;
+  }
+
+  if (input_binary->size > MAX_QUERY_LENGTH) {
+    *error_term = make_error(env, "input too large (max 16MB)");
     return false;
   }
 
