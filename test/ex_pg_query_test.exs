@@ -2181,6 +2181,16 @@ defmodule ExPgQueryTest do
     end
   end
 
+  describe "truncate" do
+    test "convenience wrapper for truncate works" do
+      query = "WITH x AS (SELECT * FROM y) SELECT * FROM x"
+      expected = "WITH x AS (...) SELECT * FROM x"
+      {:ok, result} = ExPgQuery.parse(query)
+      {:ok, truncated} = ExPgQuery.truncate(result, 40)
+      assert expected == truncated
+    end
+  end
+
   # Helper to assert statement types
   defp assert_statement_types_eq(result, expected) do
     assert ExPgQuery.statement_types(result) == expected
