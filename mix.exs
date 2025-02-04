@@ -1,10 +1,12 @@
 defmodule ExPgQuery.MixProject do
   use Mix.Project
 
+  @version "0.1.0"
+
   def project do
     [
       app: :ex_pg_query,
-      version: "0.1.0",
+      version: @version,
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -20,6 +22,10 @@ defmodule ExPgQuery.MixProject do
         "test.watch": :test
       ],
       compilers: [:elixir_make] ++ Mix.compilers(),
+      make_precompiler: {:nif, CCPrecompiler},
+      make_precompiler_url:
+        "https://github.com/hlindset/ex_pg_query/releases/download/v#{@version}/@{artefact_filename}",
+      make_precompiler_filename: "ex_pg_query",
       # Docs
       name: "ExPgQuery",
       source_url: "https://github.com/hlindset/ex_pg_query",
@@ -49,6 +55,7 @@ defmodule ExPgQuery.MixProject do
       {:elixir_make, "~> 0.9", runtime: false},
       {:ex_doc, "~> 0.36", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:cc_precompiler, "~> 0.1.10", runtime: false, github: "cocoa-xu/cc_precompiler"},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.18", only: :test},
       {:junit_formatter, "~> 3.4", only: :test}
