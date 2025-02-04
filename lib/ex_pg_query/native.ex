@@ -120,18 +120,18 @@ defmodule ExPgQuery.Native do
 
   ## Examples
 
-      iex> ExPgQuery.normalize("SELECT * FROM users WHERE id = 123")
+      iex> ExPgQuery.Native.normalize("SELECT * FROM users WHERE id = 123")
       {:ok, "SELECT * FROM users WHERE id = $1"}
 
-      iex> ExPgQuery.normalize("SELECT a, SUM(b) FROM tbl WHERE c = 'foo' GROUP BY 1, 'bar'")
+      iex> ExPgQuery.Native.normalize("SELECT a, SUM(b) FROM tbl WHERE c = 'foo' GROUP BY 1, 'bar'")
       {:ok, "SELECT a, SUM(b) FROM tbl WHERE c = $1 GROUP BY 1, $2"}
 
       # Handles multiple literals of different types
-      iex> ExPgQuery.normalize("SELECT * FROM users WHERE name = 'John' AND age > 25")
+      iex> ExPgQuery.Native.normalize("SELECT * FROM users WHERE name = 'John' AND age > 25")
       {:ok, "SELECT * FROM users WHERE name = $1 AND age > $2"}
 
       # Also normalizes special cases like passwords in DDL
-      iex> ExPgQuery.normalize("CREATE ROLE postgres PASSWORD 'xyz'")
+      iex> ExPgQuery.Native.normalize("CREATE ROLE postgres PASSWORD 'xyz'")
       {:ok, "CREATE ROLE postgres PASSWORD $1"}
   """
   def normalize(_), do: exit(:nif_library_not_loaded)

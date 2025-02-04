@@ -1,8 +1,12 @@
 defmodule ExPgQuery.FingerprintTest do
   use ExUnit.Case
 
+  alias ExPgQuery.Fingerprint
+
+  doctest ExPgQuery.Fingerprint
+
   defp fingerprint(query) do
-    {:ok, result} = ExPgQuery.fingerprint(query)
+    {:ok, result} = Fingerprint.fingerprint(query)
     result
   end
 
@@ -11,6 +15,10 @@ defmodule ExPgQuery.FingerprintTest do
       for %{input: input, expected_hash: expected_hash} <- ExPgQuery.TestData.fingerprints() do
         assert fingerprint(input) == expected_hash
       end
+    end
+
+    test "returns error on invalid query" do
+      assert {:error, "syntax error at or near \"sellect\""} == Fingerprint.fingerprint("sellect 1")
     end
 
     test "works for basic cases" do
