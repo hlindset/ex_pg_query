@@ -57,7 +57,8 @@ defmodule ExPgQuery.Truncator do
     }
   ]
 
-  # Fixes the output string by replacing placeholder ellipses with the final format.
+  # Fixes the output string by replacing placeholders with the final format.
+  # E.g. `SELECT WHERE "…"` is replaced by `...`
   defp fix_output(output) do
     output
     |> String.replace(~s|SELECT WHERE "#{@short_ellipsis}"|, @final_ellipsis)
