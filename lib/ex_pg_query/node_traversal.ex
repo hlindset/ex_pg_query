@@ -216,13 +216,13 @@ defmodule ExPgQuery.NodeTraversal do
   # Handles lists of nodes by mapping traverse_node over each element
   defp traverse_node(node_list, ctx) when is_list(node_list) do
     Enum.map(Enum.with_index(node_list), fn {node, idx} ->
-      traverse_node(node, %Ctx{ctx | location: ctx.location ++ [idx]})
+      traverse_node(node, append_ctx_location(ctx, idx))
     end)
   end
 
   # Unwraps PgQuery.Node wrapper and continues traversal
   defp traverse_node(%PgQuery.Node{node: {type, node}}, ctx) do
-    traverse_node(node, %Ctx{ctx | location: ctx.location ++ [type]})
+    traverse_node(node, append_ctx_location(ctx, type))
   end
 
   # Main traversal function for struct nodes
@@ -233,14 +233,23 @@ defmodule ExPgQuery.NodeTraversal do
       msg_to_field_nodes(node)
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Enum.map(fn {key, value} ->
-        field_ctx = ctx_for_field(updated_ctx, node, key)
-        traverse_node(value, %Ctx{field_ctx | location: field_ctx.location ++ [key]})
+        field_ctx =
+          updated_ctx
+          |> ctx_for_field(node, key)
+          |> append_ctx_location(key)
+
+        traverse_node(value, field_ctx)
       end)
 
     [{node, updated_ctx} | children]
   end
 
   # Context Update Functions
+
+  # Updates location context
+  defp append_ctx_location(%Ctx{location: location} = ctx, location_segment) do
+    %Ctx{ctx | location: Enum.reverse([location_segment | Enum.reverse(location)])}
+  end
 
   # Updates context for SELECT statements, handling aliases and CTEs
   defp ctx_for_node(ctx, %PgQuery.SelectStmt{} = select_stmt) do
