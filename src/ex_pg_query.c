@@ -7,8 +7,12 @@
 #include "../libpg_query/protobuf/pg_query.pb-c.h"
 #include "../libpg_query/vendor/protobuf-c/protobuf-c.h"
 
-#ifndef PG_QUERY_MAX_LENGTH
-#define MAX_QUERY_LENGTH (16 * 1024 * 1024)
+#ifndef EX_PG_QUERY_MAX_SQL_LENGTH
+#define MAX_SQL_LENGTH (16 * 1024 * 1024)
+#endif
+
+#ifndef EX_PG_QUERY_MAX_PROTOBUF_LENGTH
+#define MAX_PROTOBUF_LENGTH (32 * 1024 * 1024)
 #endif
 
 // Debug logging macro - can be enabled/disabled via compilation flag
@@ -62,8 +66,8 @@ static ERL_NIF_TERM make_success(ErlNifEnv *env, const unsigned char *data,
  * @return bool true if validation succeeds, false otherwise
  */
 static bool validate_args(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[],
-                          ErlNifBinary *input_binary,
-                          ERL_NIF_TERM *error_term) {
+                          ErlNifBinary *input_binary, ERL_NIF_TERM *error_term,
+                          size_t max_length) {
   if (argc != 1) {
     *error_term = make_error(env, "invalid number of arguments");
     return false;
@@ -80,7 +84,7 @@ static bool validate_args(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[],
     return false;
   }
 
-  if (input_binary->size > MAX_QUERY_LENGTH) {
+  if (input_binary->size > max_length) {
     *error_term = make_error(env, "input too large (max 16MB)");
     return false;
   }
@@ -142,7 +146,8 @@ static ERL_NIF_TERM deparse_protobuf(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting deparse_protobuf");
 
-  if (!validate_args(env, argc, argv, &input_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &input_binary, &error_term,
+                     MAX_PROTOBUF_LENGTH)) {
     return error_term;
   }
 
@@ -201,7 +206,8 @@ static ERL_NIF_TERM parse_protobuf(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting parse_protobuf");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
@@ -256,7 +262,8 @@ static ERL_NIF_TERM fingerprint(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting fingerprint calculation");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
@@ -334,7 +341,8 @@ static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
 
   DEBUG_LOG("Starting scan");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
@@ -388,7 +396,8 @@ static ERL_NIF_TERM normalize(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting normalize");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
