@@ -7,7 +7,9 @@
 #include "../libpg_query/protobuf/pg_query.pb-c.h"
 #include "../libpg_query/vendor/protobuf-c/protobuf-c.h"
 
+#ifndef PG_QUERY_MAX_LENGTH
 #define MAX_QUERY_LENGTH (16 * 1024 * 1024)
+#endif
 
 // Debug logging macro - can be enabled/disabled via compilation flag
 #ifdef DEBUG_LOGGING
