@@ -7,6 +7,14 @@
 #include "../libpg_query/protobuf/pg_query.pb-c.h"
 #include "../libpg_query/vendor/protobuf-c/protobuf-c.h"
 
+#ifndef MAX_SQL_LENGTH
+#define MAX_SQL_LENGTH (16 * 1024 * 1024)
+#endif
+
+#ifndef MAX_PROTOBUF_LENGTH
+#define MAX_PROTOBUF_LENGTH (32 * 1024 * 1024)
+#endif
+
 // Debug logging macro - can be enabled/disabled via compilation flag
 #ifdef DEBUG_LOGGING
 #define DEBUG_LOG(fmt, ...) fprintf(stderr, "DEBUG: " fmt "\n", ##__VA_ARGS__)
@@ -48,6 +56,37 @@ static ERL_NIF_TERM make_success(ErlNifEnv *env, const unsigned char *data,
 }
 
 /**
+ * Allocates a null-terminated string from a binary input using enif_alloc.
+ * Caller must use enif_free to deallocate the returned string.
+ *
+ * @param binary The input binary to convert
+ * @param error_term Output parameter for error term if allocation fails
+ * @param env The NIF environment
+ * @return char* Null-terminated string or NULL if allocation fails
+ */
+static char *mk_cstr(const ErlNifBinary *binary, ERL_NIF_TERM *error_term,
+                     ErlNifEnv *env) {
+  // Check for overflow in size calculation
+  if (binary->size >= SIZE_MAX - 1) {
+    *error_term = make_error(env, "input size too large");
+    return NULL;
+  }
+
+  char *str = enif_alloc(binary->size + 1);
+  if (str == NULL) {
+    DEBUG_LOG("Memory allocation failed for string of size %zu",
+              binary->size + 1);
+    *error_term = make_error(env, "memory allocation failed");
+    return NULL;
+  }
+
+  memcpy(str, binary->data, binary->size);
+  str[binary->size] = '\0';
+
+  return str;
+}
+
+/**
  * Validates NIF arguments ensuring proper arity and binary input
  *
  * @param env The NIF environment
@@ -58,8 +97,8 @@ static ERL_NIF_TERM make_success(ErlNifEnv *env, const unsigned char *data,
  * @return bool true if validation succeeds, false otherwise
  */
 static bool validate_args(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[],
-                          ErlNifBinary *input_binary,
-                          ERL_NIF_TERM *error_term) {
+                          ErlNifBinary *input_binary, ERL_NIF_TERM *error_term,
+                          size_t max_length) {
   if (argc != 1) {
     *error_term = make_error(env, "invalid number of arguments");
     return false;
@@ -73,6 +112,11 @@ static bool validate_args(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[],
 
   if (!enif_inspect_binary(env, argv[0], input_binary)) {
     *error_term = make_error(env, "failed to inspect binary input");
+    return false;
+  }
+
+  if (input_binary->size > max_length) {
+    *error_term = make_error(env, "input too large");
     return false;
   }
 
@@ -133,7 +177,8 @@ static ERL_NIF_TERM deparse_protobuf(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting deparse_protobuf");
 
-  if (!validate_args(env, argc, argv, &input_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &input_binary, &error_term,
+                     MAX_PROTOBUF_LENGTH)) {
     return error_term;
   }
 
@@ -192,24 +237,21 @@ static ERL_NIF_TERM parse_protobuf(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting parse_protobuf");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Parse the query
   DEBUG_LOG("Parsing query of size %zu", query_binary.size);
   PgQueryProtobufParseResult result = pg_query_parse_protobuf(query_str);
-  free(query_str);
+  enif_free(query_str);
 
   if (result.error != NULL) {
     DEBUG_LOG("Parse error: %s at position %d", result.error->message,
@@ -247,24 +289,21 @@ static ERL_NIF_TERM fingerprint(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting fingerprint calculation");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Calculate fingerprint
   DEBUG_LOG("Calculating fingerprint for query of size %zu", query_binary.size);
   PgQueryFingerprintResult result = pg_query_fingerprint(query_str);
-  free(query_str); // Free the query string as we don't need it anymore
+  enif_free(query_str); // Free the query string as we don't need it anymore
 
   if (result.error != NULL) {
     DEBUG_LOG("Fingerprint error: %s", result.error->message);
@@ -325,24 +364,21 @@ static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
 
   DEBUG_LOG("Starting scan");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Scan the query
   DEBUG_LOG("Scanning query of size %zu", query_binary.size);
   PgQueryScanResult result = pg_query_scan(query_str);
-  free(query_str); // Free the query string as we don't need it anymore
+  enif_free(query_str); // Free the query string as we don't need it anymore
 
   if (result.error != NULL) {
     DEBUG_LOG("Scan error: %s", result.error->message);
@@ -379,24 +415,21 @@ static ERL_NIF_TERM normalize(ErlNifEnv *env, int argc,
 
   DEBUG_LOG("Starting normalize");
 
-  if (!validate_args(env, argc, argv, &query_binary, &error_term)) {
+  if (!validate_args(env, argc, argv, &query_binary, &error_term,
+                     MAX_SQL_LENGTH)) {
     return error_term;
   }
 
-  // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
-  if (query_str == NULL) {
-    DEBUG_LOG("Memory allocation failed for query string");
-    return make_error(env, "memory allocation failed");
-  }
+  char *query_str = mk_cstr(&query_binary, &error_term, env);
 
-  memcpy(query_str, query_binary.data, query_binary.size);
-  query_str[query_binary.size] = '\0';
+  if (query_str == NULL) {
+    return error_term;
+  }
 
   // Normalize the query
   DEBUG_LOG("Normalizing query of size %zu", query_binary.size);
   PgQueryNormalizeResult result = pg_query_normalize(query_str);
-  free(query_str);
+  enif_free(query_str);
 
   if (result.error != NULL) {
     DEBUG_LOG("Normalize error: %s", result.error->message);
