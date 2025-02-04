@@ -1,13 +1,6 @@
 defmodule ExPgQuery.TreeWalker do
   @moduledoc """
-  Traverses a PgQuery Protobuf message tree, yielding each node to a callback function.
-
-  It supports:
-
-  - Traversal of nested message structures
-  - Handling of list nodes
-  - Location tracking for each visited node
-  - Accumulation of results through callbacks
+  Traverses a PgQuery AST, yielding each node to a callback function.
 
   The walker maintains a path (location) to each node as it traverses the tree,
   allowing for precise tracking of node positions in the overall structure.
@@ -32,9 +25,19 @@ defmodule ExPgQuery.TreeWalker do
 
   ## Example
 
-      TreeWalker.walk(root_node, [], fn node, field_name, {child_node, location}, acc ->
-        [{node, field_name, child_node, location} | acc]
-      end)
+      iex> {:ok, tree} = ExPgQuery.Protobuf.from_sql("SELECT id, name FROM users WHERE age > 21")
+      iex> columns = ExPgQuery.TreeWalker.walk(tree, [], fn
+      ...>   _parent, _field, {%PgQuery.ColumnRef{} = col, _loc}, acc ->
+      ...>     [col | acc]
+      ...>   _parent, _field, _node, acc ->
+      ...>     acc
+      ...> end)
+      [
+        %PgQuery.ColumnRef{fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: "age"}}}], location: 33},
+        %PgQuery.ColumnRef{fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: "name"}}}], location: 11},
+        %PgQuery.ColumnRef{fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: "id"}}}], location: 7}
+      ]
+
   """
   def walk(tree, acc, callback) do
     {_, result} = do_walk([{tree, []}], acc, callback)

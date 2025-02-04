@@ -7,15 +7,19 @@ defmodule ExPgQuery.Protobuf do
   Parses a SQL query into a Protocol Buffer AST.
 
   ## Parameters
-    - query: String containing the SQL query to parse
+
+    * `query` - SQL query string to parse
 
   ## Returns
-    - `{:ok, protobuf}` - Successfully parsed query as PgQuery.ParseResult
-    - `{:error, error}` - Error with reason
+
+    * `{:ok, protobuf}` - Successfully parsed PgQuery.ParseResult
+    * `{:error, error}` - Error with reason
 
   ## Examples
+
       iex> parsed = ExPgQuery.Protobuf.from_sql("SELECT * FROM users")
       {:ok, %PgQuery.ParseResult{}} = parsed
+
   """
   def from_sql(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
@@ -30,13 +34,17 @@ defmodule ExPgQuery.Protobuf do
   Identical to `from_sql/1` but raises on error.
 
   ## Parameters
-    - query: String containing the SQL query to parse
+
+    * `query` - SQL query string to parse
 
   ## Returns
-    - protobuf: The parsed PgQuery.ParseResult
+
+    * PgQuery.ParseResult struct
 
   ## Raises
-    - Runtime error if parsing fails
+
+    * Runtime error if parsing fails
+
   """
   def from_sql!(query) do
     case from_sql(query) do
@@ -49,16 +57,20 @@ defmodule ExPgQuery.Protobuf do
   Converts a Protocol Buffer AST back into a SQL query string.
 
   ## Parameters
-    - protobuf: A PgQuery.ParseResult struct containing the query AST
+
+    * `protobuf` - PgQuery.ParseResult struct containing query AST
 
   ## Returns
-    - `{:ok, string}` - Successfully deparsed query
-    - `{:error, error}` - Error with reason
+
+    * `{:ok, string}` - Successfully deparsed query
+    * `{:error, error}` - Error with reason
 
   ## Examples
+
       iex> parsed = ExPgQuery.Protobuf.from_sql!("SELECT * FROM users")
       iex> ExPgQuery.Protobuf.to_sql(parsed)
       {:ok, "SELECT * FROM users"}
+
   """
   def to_sql(%PgQuery.ParseResult{} = protobuf) do
     binary_protobuf = Protox.encode!(protobuf) |> IO.iodata_to_binary()
@@ -69,13 +81,17 @@ defmodule ExPgQuery.Protobuf do
   Identical to `to_sql/1` but raises on error.
 
   ## Parameters
-    - protobuf: A PgQuery.ParseResult struct containing the query AST
+
+    * `protobuf` - PgQuery.ParseResult struct containing query AST
 
   ## Returns
-    - string: The deparsed SQL query
+
+    * SQL query string
 
   ## Raises
-    - Runtime error if departing fails
+
+    * Runtime error if departing fails
+
   """
   def to_sql!(protobuf) do
     case to_sql(protobuf) do
@@ -91,25 +107,29 @@ defmodule ExPgQuery.Protobuf do
   it to its SQL representation.
 
   ## Parameters
-    - stmt: A PgQuery statement struct
+
+    * `stmt` - PgQuery statement struct
 
   ## Returns
-    - `{:ok, string}` - Successfully deparsed statement
-    - `{:error, error}` - Error with reason
+
+    * `{:ok, string}` - Successfully deparsed statement
+    * `{:error, error}` - Error with reason
 
   ## Examples
-  iex> %PgQuery.ParseResult{
-  ...>   version: 170000,
-  ...>   stmts: [
-  ...>     %PgQuery.RawStmt{
-  ...>       stmt: %PgQuery.Node{
-  ...>         node: {:select_stmt, select_stmt}
-  ...>       }
-  ...>     }
-  ...>   ]
-  ...> } = ExPgQuery.Protobuf.from_sql!("SELECT * FROM users")
-  iex> ExPgQuery.Protobuf.stmt_to_sql(select_stmt)
-  {:ok, "SELECT * FROM users"}
+
+      iex> %PgQuery.ParseResult{
+      ...>   version: 170000,
+      ...>   stmts: [
+      ...>     %PgQuery.RawStmt{
+      ...>       stmt: %PgQuery.Node{
+      ...>         node: {:select_stmt, select_stmt}
+      ...>       }
+      ...>     }
+      ...>   ]
+      ...> } = ExPgQuery.Protobuf.from_sql!("SELECT * FROM users")
+      iex> ExPgQuery.Protobuf.stmt_to_sql(select_stmt)
+      {:ok, "SELECT * FROM users"}
+
   """
   def stmt_to_sql(stmt) do
     # todo: don't hardcode version
@@ -129,13 +149,17 @@ defmodule ExPgQuery.Protobuf do
   Similar to `stmt_to_sql/1` but raises on error.
 
   ## Parameters
-    - stmt: A statement struct from the PgQuery namespace
+
+    * `stmt` - PgQuery statement struct
 
   ## Returns
-    - string: The deparsed SQL statement
+
+    * SQL statement string
 
   ## Raises
-    - Runtime error if departing fails
+
+    * Runtime error if departing fails
+
   """
   def stmt_to_sql!(stmt) do
     case stmt_to_sql(stmt) do
@@ -151,11 +175,14 @@ defmodule ExPgQuery.Protobuf do
   it in a SELECT statement and extracting the WHERE clause.
 
   ## Parameters
-    - expr: An expression struct from the PgQuery namespace
+
+    * `expr` - PgQuery expression struct
 
   ## Returns
-    - `{:ok, string}` - Successfully deparsed expression
-    - `{:error, error}` - Error with reason
+
+    * `{:ok, string}` - Successfully deparsed expression
+    * `{:error, error}` - Error with reason
+
   """
   def expr_to_sql(expr) do
     case stmt_to_sql(%PgQuery.SelectStmt{where_clause: expr, op: :SETOP_NONE}) do
@@ -171,13 +198,17 @@ defmodule ExPgQuery.Protobuf do
   Similar to `expr_to_sql/1` but raises on error.
 
   ## Parameters
-    - expr: An expression struct from the PgQuery namespace
+
+    * `expr` - PgQuery expression struct
 
   ## Returns
-    - string: The deparsed SQL expression
+
+    * SQL expression string
 
   ## Raises
-    - Runtime error if departing fails
+
+    * Runtime error if departing fails
+
   """
   def expr_to_sql!(expr) do
     case expr_to_sql(expr) do
