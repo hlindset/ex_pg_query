@@ -161,6 +161,7 @@ defmodule ExPgQuery.NodeTraversal do
     @type stmt_type :: :none | :select | :dml | :ddl | :call
 
     defstruct type: :none,
+              location: [],
               current_cte: nil,
               is_recursive_cte: false,
               subselect_item: false,
@@ -199,9 +200,12 @@ defmodule ExPgQuery.NodeTraversal do
       iex> ExPgQuery.NodeTraversal.nodes(result.protobuf)
   """
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
-    Enum.flat_map(stmts, fn
-      %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {_type, node}}} ->
-        traverse_node(node, %Ctx{type: default_node_type(node)})
+    Enum.flat_map(Enum.with_index(stmts), fn
+      {%PgQuery.RawStmt{stmt: %PgQuery.Node{node: {type, node}}}, idx} ->
+        traverse_node(node, %Ctx{
+          type: default_node_type(node),
+          location: [:stmts, idx, :stmt, type]
+        })
         |> List.flatten()
 
       _ ->
@@ -211,12 +215,14 @@ defmodule ExPgQuery.NodeTraversal do
 
   # Handles lists of nodes by mapping traverse_node over each element
   defp traverse_node(node_list, ctx) when is_list(node_list) do
-    Enum.map(node_list, &traverse_node(&1, ctx))
+    Enum.map(Enum.with_index(node_list), fn {node, idx} ->
+      traverse_node(node, %Ctx{ctx | location: ctx.location ++ [idx]})
+    end)
   end
 
   # Unwraps PgQuery.Node wrapper and continues traversal
-  defp traverse_node(%PgQuery.Node{node: {_type, node}}, ctx) do
-    traverse_node(node, ctx)
+  defp traverse_node(%PgQuery.Node{node: {type, node}}, ctx) do
+    traverse_node(node, %Ctx{ctx | location: ctx.location ++ [type]})
   end
 
   # Main traversal function for struct nodes
@@ -227,7 +233,8 @@ defmodule ExPgQuery.NodeTraversal do
       msg_to_field_nodes(node)
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Enum.map(fn {key, value} ->
-        traverse_node(value, ctx_for_field(node, key, updated_ctx))
+        field_ctx = ctx_for_field(node, key, updated_ctx)
+        traverse_node(value, %Ctx{field_ctx | location: field_ctx.location ++ [key]})
       end)
 
     [{node, updated_ctx} | children]
