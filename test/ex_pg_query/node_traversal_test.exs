@@ -1,15 +1,15 @@
 defmodule ExPgQuery.NodeTraversalTest do
   use ExUnit.Case
 
-  alias ExPgQuery.Parser
+  alias ExPgQuery.Protobuf
   alias ExPgQuery.NodeTraversal
 
   doctest ExPgQuery.NodeTraversal
 
   describe "table alias tracking" do
     test "tracks table aliases in simple joins" do
-      {:ok, parse_result} =
-        Parser.parse("""
+      {:ok, tree} =
+        Protobuf.from_sql("""
         SELECT t1.col1, t2.col2, t3.col3
         FROM public.table_1 AS t1
         JOIN schema2.table_2 t2 ON t2.id = t1.id
@@ -17,7 +17,7 @@ defmodule ExPgQuery.NodeTraversalTest do
         WHERE t1.active = true
         """)
 
-      nodes = NodeTraversal.nodes(parse_result.protobuf)
+      nodes = NodeTraversal.nodes(tree)
 
       # Find the SelectStmt context
       select_ctx =
@@ -37,8 +37,8 @@ defmodule ExPgQuery.NodeTraversalTest do
     end
 
     test "keeps aliases scoped to their SelectStmt" do
-      {:ok, parse_result} =
-        Parser.parse("""
+      {:ok, tree} =
+        Protobuf.from_sql("""
         SELECT *
         FROM (
           SELECT * FROM table_1 AS t1
@@ -49,7 +49,7 @@ defmodule ExPgQuery.NodeTraversalTest do
         WHERE sub1.id = sub2.id
         """)
 
-      nodes = NodeTraversal.nodes(parse_result.protobuf)
+      nodes = NodeTraversal.nodes(tree)
 
       # Find the subquery contexts
       subquery_contexts =

@@ -9,13 +9,14 @@ defmodule ExPgQuery.Truncator do
 
   Example:
       iex> long_query = "SELECT very, many, columns, that, make, query, too, long FROM a_table"
-      iex> {:ok, protobuf} = ExPgQuery.parse_protobuf(long_query)
+      iex> {:ok, protobuf} = ExPgQuery.Protobuf.from_sql(long_query)
       iex> ExPgQuery.Truncator.truncate(protobuf, 30)
       {:ok, "SELECT ... FROM a_table"}
   """
 
   alias ExPgQuery.TreeWalker
   alias ExPgQuery.TreeUtils
+  alias ExPgQuery.Protobuf
 
   defmodule PossibleTruncation do
     @moduledoc """
@@ -68,10 +69,8 @@ defmodule ExPgQuery.Truncator do
   #
   # Returns `{:ok, {length, output}}` where length is the string length and
   # output is the deparsed query string.
-  defp query_length(protobuf) do
-    with {:ok, encoded} <- Protox.encode(protobuf),
-         binary = IO.iodata_to_binary(encoded),
-         {:ok, output} <- ExPgQuery.Native.deparse_protobuf(binary) do
+  defp query_length(tree) do
+    with {:ok, output} <- Protobuf.to_sql(tree) do
       fixed_output = fix_output(output)
       {:ok, {String.length(fixed_output), fixed_output}}
     end
@@ -92,7 +91,7 @@ defmodule ExPgQuery.Truncator do
 
   ## Examples
       iex> query = "SELECT * FROM users WHERE name = 'very long name'"
-      iex> {:ok, tree} = ExPgQuery.parse_protobuf(query)
+      iex> {:ok, tree} = ExPgQuery.Protobuf.from_sql(query)
       iex> ExPgQuery.Truncator.truncate(tree, 30)
       {:ok, "SELECT * FROM users WHERE ..."}
   """
@@ -208,7 +207,7 @@ defmodule ExPgQuery.Truncator do
   # Calculates the length of a SELECT target list when rendered.
   defp select_target_list_length(node) do
     with {:ok, query} <-
-           ExPgQuery.deparse_stmt(%PgQuery.SelectStmt{
+           Protobuf.stmt_to_sql(%PgQuery.SelectStmt{
              target_list: node,
              op: :SETOP_NONE
            }) do
@@ -223,7 +222,7 @@ defmodule ExPgQuery.Truncator do
   # Calculates the length of an UPDATE target list when rendered.
   defp update_target_list_length(node) do
     with {:ok, query} <-
-           ExPgQuery.deparse_stmt(%PgQuery.UpdateStmt{
+           Protobuf.stmt_to_sql(%PgQuery.UpdateStmt{
              target_list: node,
              relation: %PgQuery.RangeVar{relname: "x", inh: true}
            }) do
@@ -237,7 +236,7 @@ defmodule ExPgQuery.Truncator do
 
   # Calculates the length of a WHERE clause when rendered.
   defp where_clause_length(node) do
-    case ExPgQuery.deparse_expr(node) do
+    case Protobuf.expr_to_sql(node) do
       {:ok, expr} -> {:ok, String.length(expr)}
       {:error, _} = error -> error
     end
@@ -246,7 +245,7 @@ defmodule ExPgQuery.Truncator do
   # Calculates the length of VALUES lists when rendered.
   defp select_values_lists_length(node) do
     with {:ok, query} <-
-           ExPgQuery.deparse_stmt(%PgQuery.SelectStmt{
+           Protobuf.stmt_to_sql(%PgQuery.SelectStmt{
              values_lists: node,
              op: :SETOP_NONE
            }) do
@@ -260,7 +259,7 @@ defmodule ExPgQuery.Truncator do
 
   # Calculates the length of a CTE query when rendered.
   defp cte_query_length(node) do
-    case ExPgQuery.deparse_stmt(node) do
+    case Protobuf.stmt_to_sql(node) do
       {:ok, expr} -> {:ok, String.length(expr)}
       {:error, _} = error -> error
     end
@@ -269,7 +268,7 @@ defmodule ExPgQuery.Truncator do
   # Calculates the length of column definitions when rendered.
   defp cols_length(node) do
     with {:ok, query} <-
-           ExPgQuery.deparse_stmt(%PgQuery.InsertStmt{
+           Protobuf.stmt_to_sql(%PgQuery.InsertStmt{
              relation: %PgQuery.RangeVar{relname: "x", inh: true},
              cols: node
            }) do

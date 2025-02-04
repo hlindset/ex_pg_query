@@ -1,8 +1,10 @@
 defmodule ExPgQuery.FingerprintTest do
   use ExUnit.Case
 
+  doctest ExPgQuery.Fingerprint
+
   defp fingerprint(query) do
-    {:ok, result} = ExPgQuery.fingerprint(query)
+    {:ok, result} = ExPgQuery.Fingerprint.fingerprint(query)
     result
   end
 

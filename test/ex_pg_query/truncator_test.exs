@@ -1,6 +1,7 @@
 defmodule ExPgQuery.TruncatorTest do
   use ExUnit.Case
 
+  alias ExPgQuery.Protobuf
   alias ExPgQuery.Truncator
 
   doctest ExPgQuery.Truncator
@@ -168,13 +169,13 @@ defmodule ExPgQuery.TruncatorTest do
   end
 
   defp assert_truncate_eq(query, truncate_length, expected) do
-    {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
+    {:ok, parse_result} = Protobuf.from_sql(query)
     {:ok, result} = Truncator.truncate(parse_result, truncate_length)
     assert result == expected
   end
 
   defp assert_truncate_length(query, truncate_length, expected) do
-    {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
+    {:ok, parse_result} = Protobuf.from_sql(query)
     {:ok, result} = Truncator.truncate(parse_result, truncate_length)
     assert String.length(result) == expected
   end

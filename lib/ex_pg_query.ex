@@ -1,251 +1,361 @@
 defmodule ExPgQuery do
   @moduledoc """
-  Provides high-level functions for parsing, departing, and analyzing PostgreSQL queries.
+  Provides functionality for parsing PostgreSQL SQL queries and analyzing their structure.
 
-  This module wraps the low-level NIFs provided by ExPgQuery.Native and adds
-  convenient interfaces for working with the PostgreSQL query AST.
-  """
-
-  @doc """
-  Parses a SQL query into a Protocol Buffer AST.
-
-  ## Parameters
-    - query: String containing the SQL query to parse
-
-  ## Returns
-    - `{:ok, protobuf}` - Successfully parsed query as PgQuery.ParseResult
-    - `{:error, error}` - Error with reason
-
-  ## Examples
-      iex> parsed = ExPgQuery.parse_protobuf("SELECT * FROM users")
-      {:ok, %PgQuery.ParseResult{}} = parsed
-  """
-  def parse_protobuf(query) do
-    with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
-         {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
-      {:ok, protobuf}
-    else
-      {:error, error} -> {:error, error}
-    end
-  end
-
-  @doc """
-  Identical to `parse_protobuf/1` but raises on error.
-
-  ## Parameters
-    - query: String containing the SQL query to parse
-
-  ## Returns
-    - protobuf: The parsed PgQuery.ParseResult
-
-  ## Raises
-    - Runtime error if parsing fails
-  """
-  def parse_protobuf!(query) do
-    case parse_protobuf(query) do
-      {:ok, protobuf} -> protobuf
-      {:error, error} -> raise "Parse error: #{inspect(error)}"
-    end
-  end
-
-  @doc """
-  Converts a Protocol Buffer AST back into a SQL query string.
-
-  ## Parameters
-    - protobuf: A PgQuery.ParseResult struct containing the query AST
-
-  ## Returns
-    - `{:ok, string}` - Successfully deparsed query
-    - `{:error, error}` - Error with reason
-
-  ## Examples
-      iex> parsed = ExPgQuery.parse_protobuf!("SELECT * FROM users")
-      iex> ExPgQuery.deparse(parsed)
-      {:ok, "SELECT * FROM users"}
-  """
-  def deparse(%PgQuery.ParseResult{} = protobuf) do
-    binary_protobuf = Protox.encode!(protobuf) |> IO.iodata_to_binary()
-    ExPgQuery.Native.deparse_protobuf(binary_protobuf)
-  end
-
-  @doc """
-  Identical to `deparse/1` but raises on error.
-
-  ## Parameters
-    - protobuf: A PgQuery.ParseResult struct containing the query AST
-
-  ## Returns
-    - string: The deparsed SQL query
-
-  ## Raises
-    - Runtime error if departing fails
-  """
-  def deparse!(protobuf) do
-    case deparse(protobuf) do
-      {:ok, query} -> query
-      {:error, error} -> raise "Deparse error: #{inspect(error)}"
-    end
-  end
-
-  @doc """
-  Deparses a single statement node into SQL.
-
-  Takes a statement struct (like %SelectStmt{}, %InsertStmt{}, etc) and converts
-  it to its SQL representation.
-
-  ## Parameters
-    - stmt: A PgQuery statement struct
-
-  ## Returns
-    - `{:ok, string}` - Successfully deparsed statement
-    - `{:error, error}` - Error with reason
-
-  ## Examples
-  iex> %PgQuery.ParseResult{
-  ...>   version: 170000,
-  ...>   stmts: [
-  ...>     %PgQuery.RawStmt{
-  ...>       stmt: %PgQuery.Node{
-  ...>         node: {:select_stmt, select_stmt}
-  ...>       }
-  ...>     }
-  ...>   ]
-  ...> } = ExPgQuery.parse_protobuf!("SELECT * FROM users")
-  iex> ExPgQuery.deparse_stmt(select_stmt)
-  {:ok, "SELECT * FROM users"}
-  """
-  def deparse_stmt(stmt) do
-    # todo: don't hardcode version
-    %{name: oneof_name} =
-      PgQuery.Node.fields_defs() |> Enum.find(&(&1.type == {:message, stmt.__struct__}))
-
-    protobuf =
-      %PgQuery.ParseResult{
-        version: 170_000,
-        stmts: [%PgQuery.RawStmt{stmt: %PgQuery.Node{node: {oneof_name, stmt}}}]
-      }
-
-    deparse(protobuf)
-  end
-
-  @doc """
-  Similar to `deparse_stmt/1` but raises on error.
-
-  ## Parameters
-    - stmt: A statement struct from the PgQuery namespace
-
-  ## Returns
-    - string: The deparsed SQL statement
-
-  ## Raises
-    - Runtime error if departing fails
-  """
-  def deparse_stmt!(stmt) do
-    case deparse_stmt(stmt) do
-      {:ok, query} -> query
-      {:error, error} -> raise "Deparse error: #{inspect(error)}"
-    end
-  end
-
-  @doc """
-  Deparses a single expression node into SQL.
-
-  Takes an expression node and converts it to its SQL representation by wrapping
-  it in a SELECT statement and extracting the WHERE clause.
-
-  ## Parameters
-    - expr: An expression struct from the PgQuery namespace
-
-  ## Returns
-    - `{:ok, string}` - Successfully deparsed expression
-    - `{:error, error}` - Error with reason
-  """
-  def deparse_expr(expr) do
-    case deparse_stmt(%PgQuery.SelectStmt{where_clause: expr, op: :SETOP_NONE}) do
-      {:ok, query} ->
-        {:ok, String.replace_leading(query, "SELECT WHERE ", "")}
-
-      {:error, error} ->
-        {:error, error}
-    end
-  end
-
-  @doc """
-  Similar to `deparse_expr/1` but raises on error.
-
-  ## Parameters
-    - expr: An expression struct from the PgQuery namespace
-
-  ## Returns
-    - string: The deparsed SQL expression
-
-  ## Raises
-    - Runtime error if departing fails
-  """
-  def deparse_expr!(expr) do
-    case deparse_expr(expr) do
-      {:ok, query} -> query
-      {:error, error} -> raise "Deparse error: #{inspect(error)}"
-    end
-  end
-
-  @doc """
-  Generates a fingerprint string that identifies structurally similar queries.
-
-  Creates a hash that can be used to group similar queries that differ only in
-  their literal values. Useful for query analysis and caching.
-
-  ## Parameters
-    - sql: String containing the SQL query to fingerprint
-
-  ## Returns
-    - `{:ok, string}` - Successfully generated fingerprint
-    - `{:error, reason}` - Error with reason
-
-  ## Examples
-      iex> ExPgQuery.fingerprint("SELECT * FROM users WHERE id = 1")
-      {:ok, "a0ead580058af585"}
-      iex> ExPgQuery.fingerprint("SELECT * FROM users WHERE id = 2")
-      {:ok, "a0ead580058af585"}
-  """
-  def fingerprint(sql) do
-    case ExPgQuery.Native.fingerprint(sql) do
-      {:ok, %{fingerprint_str: fingerprint}} -> {:ok, fingerprint}
-      {:error, _reason} = err -> err
-    end
-  end
-
-  @doc """
-  Normalizes a SQL query by replacing literal values with placeholders.
-
-  This function converts literal values in the query to positional parameters ($1, $2, etc.)
-  while preserving the query structure. This is particularly useful for identifying similar
-  queries that differ only in their literal values
-
-  ## Parameters
-    - sql: String containing the SQL query to normalize
-
-  ## Returns
-    - `{:ok, string}` - Successfully normalized query with literals replaced by $N parameters
-    - `{:error, reason}` - Error with provided reason
+  This module parses SQL queries and extracts detailed information about the tables,
+  functions, CTEs (Common Table Expressions), aliases, and filter columns referenced
+  within them. It supports analysis of different types of SQL statements including
+  SELECT, DDL (Data Definition Language), and DML (Data Manipulation Language) operations.
 
   ## Examples
 
-      iex> ExPgQuery.normalize("SELECT * FROM users WHERE id = 123")
-      {:ok, "SELECT * FROM users WHERE id = $1"}
+      iex> {:ok, result} = ExPgQuery.parse("SELECT * FROM users WHERE users.id = 1")
+      iex> ExPgQuery.tables(result)
+      ["users"]
+      iex> ExPgQuery.filter_columns(result)
+      [{"users", "id"}]
 
-      iex> ExPgQuery.normalize("SELECT a, SUM(b) FROM tbl WHERE c = 'foo' GROUP BY 1, 'bar'")
-      {:ok, "SELECT a, SUM(b) FROM tbl WHERE c = $1 GROUP BY 1, $2"}
+      iex> {:ok, result} = ExPgQuery.parse("DROP FUNCTION add(a integer, b integer)")
+      iex> ExPgQuery.ddl_functions(result)
+      ["add"]
 
-      # Handles multiple literals of different types
-      iex> ExPgQuery.normalize("SELECT * FROM users WHERE name = 'John' AND age > 25")
-      {:ok, "SELECT * FROM users WHERE name = $1 AND age > $2"}
-
-      # Also normalizes special cases like passwords in DDL
-      iex> ExPgQuery.normalize("CREATE ROLE postgres PASSWORD 'xyz'")
-      {:ok, "CREATE ROLE postgres PASSWORD $1"}
+  The parser provides detailed analysis of:
+  - Tables referenced in queries
+  - Function calls and definitions
+  - Common Table Expressions (CTEs)
+  - Table aliases
+  - Filter columns used in WHERE clauses
+  - Statement types
   """
-  def normalize(sql) do
-    ExPgQuery.Native.normalize(sql)
+
+  alias ExPgQuery.NodeTraversal
+  alias ExPgQuery.NodeTraversal.Ctx
+
+  defmodule ParseResult do
+    @moduledoc """
+    Represents the result of parsing a SQL query, providing analysis of tables,
+    functions, CTEs, and aliases found in the query.
+    """
+
+    defstruct tree: nil,
+              tables: [],
+              table_aliases: [],
+              cte_names: [],
+              functions: [],
+              filter_columns: []
+  end
+
+  @doc """
+  Parses a SQL query and returns detailed information about its structure.
+
+  Returns `{:ok, %ParseResult{}}` containing analysis of tables, functions, CTEs,
+  aliases and filter columns found in the query.
+  """
+  def parse(query) do
+    with {:ok, tree} <- ExPgQuery.Protobuf.from_sql(query) do
+      nodes = NodeTraversal.nodes(tree)
+
+      result =
+        Enum.reduce(nodes, %ParseResult{tree: tree}, fn node, acc ->
+          case node do
+            {node, %Ctx{} = ctx}
+            when is_struct(node, PgQuery.SelectStmt) or is_struct(node, PgQuery.UpdateStmt) or
+                   is_struct(node, PgQuery.MergeStmt) ->
+              new_table_aliases =
+                ctx.table_aliases
+                # we don't want to collect aliases for CTEs
+                |> Map.reject(fn {_k, %{relation: relation}} ->
+                  Enum.member?(ctx.cte_names, relation)
+                end)
+                |> Map.values()
+
+              %ParseResult{
+                acc
+                | table_aliases: acc.table_aliases ++ new_table_aliases,
+                  cte_names: acc.cte_names ++ ctx.cte_names
+              }
+
+            {%PgQuery.DropStmt{remove_type: remove_type} = node, %Ctx{type: type}}
+            when remove_type in [
+                   :OBJECT_TABLE,
+                   :OBJECT_VIEW,
+                   :OBJECT_FUNCTION,
+                   :OBJECT_RULE,
+                   :OBJECT_TRIGGER
+                 ] ->
+              objects =
+                Enum.map(node.objects, fn
+                  %PgQuery.Node{node: {:list, list}} ->
+                    Enum.map(list.items, fn
+                      %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} -> sval
+                      _ -> nil
+                    end)
+
+                  %PgQuery.Node{
+                    node: {:object_with_args, %PgQuery.ObjectWithArgs{objname: objname}}
+                  } ->
+                    Enum.map(objname, fn
+                      %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} -> sval
+                      _ -> nil
+                    end)
+
+                  %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                    sval
+                end)
+
+              case remove_type do
+                rt when rt in [:OBJECT_TABLE, :OBJECT_VIEW] ->
+                  Enum.reduce(objects, acc, fn rel, acc ->
+                    table = %{name: Enum.join(rel, "."), type: type}
+                    %ParseResult{acc | tables: [table | acc.tables]}
+                  end)
+
+                rt when rt in [:OBJECT_RULE, :OBJECT_TRIGGER] ->
+                  Enum.reduce(objects, acc, fn obj, acc ->
+                    name = Enum.slice(obj, 0..-2//1) |> Enum.join(".")
+                    table = %{name: name, type: type}
+                    %ParseResult{acc | tables: [table | acc.tables]}
+                  end)
+
+                :OBJECT_FUNCTION ->
+                  Enum.reduce(objects, acc, fn rel, acc ->
+                    function = %{name: Enum.join(rel, "."), type: type}
+                    %ParseResult{acc | functions: [function | acc.functions]}
+                  end)
+
+                _ ->
+                  acc
+              end
+
+            #
+            # subselect items
+            #
+
+            {%PgQuery.ColumnRef{} = node, %Ctx{table_aliases: aliases, condition_item: true}} ->
+              field =
+                node.fields
+                |> Enum.filter(fn %PgQuery.Node{node: {type, _}} -> type == :string end)
+                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                  sval
+                end)
+
+              field =
+                case field do
+                  [tbl, fld] ->
+                    case Map.get(aliases, tbl) do
+                      nil -> {tbl, fld}
+                      alias -> {alias_to_name(alias), fld}
+                    end
+
+                  [fld] ->
+                    {nil, fld}
+
+                  _ ->
+                    nil
+                end
+
+              if field do
+                %ParseResult{acc | filter_columns: [field | acc.filter_columns]}
+              else
+                acc
+              end
+
+            #
+            # from clause items
+            #
+
+            {%PgQuery.RangeVar{} = node, %Ctx{type: type, from_clause_item: true} = ctx} ->
+              table_name =
+                case node do
+                  %PgQuery.RangeVar{schemaname: "", relname: relname} ->
+                    relname
+
+                  %PgQuery.RangeVar{schemaname: schemaname, relname: relname} ->
+                    "#{schemaname}.#{relname}"
+                end
+
+              is_cte_name =
+                Enum.member?(ctx.cte_names, table_name) || ctx.current_cte == table_name
+
+              cond do
+                # we're outside a cte, so it's a cte reference
+                is_cte_name && ctx.current_cte == nil ->
+                  acc
+
+                # we're inside a recursive cte, so it's a cte's reference to itself
+                is_cte_name && ctx.current_cte == table_name && ctx.is_recursive_cte ->
+                  acc
+
+                # otherwise, it's a cte's reference to a table with the same name
+                # or just a table reference
+                true ->
+                  table = %{
+                    name: table_name,
+                    type: type,
+                    location: node.location,
+                    schemaname: if(node.schemaname == "", do: nil, else: node.schemaname),
+                    relname: node.relname,
+                    inh: node.inh,
+                    relpersistence: node.relpersistence
+                  }
+
+                  %ParseResult{acc | tables: [table | acc.tables]}
+              end
+
+            #
+            # both from clause items and subselect items
+            #
+
+            {node, %Ctx{type: type}}
+            when is_struct(node, PgQuery.FuncCall) or is_struct(node, PgQuery.CreateFunctionStmt) ->
+              function =
+                node.funcname
+                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                  sval
+                end)
+                |> Enum.join(".")
+
+              %ParseResult{acc | functions: [%{name: function, type: type} | acc.functions]}
+
+            {%PgQuery.RenameStmt{
+               rename_type: :OBJECT_FUNCTION,
+               newname: newname,
+               object: %PgQuery.Node{
+                 node:
+                   {:object_with_args,
+                    %PgQuery.ObjectWithArgs{
+                      objname: objname
+                    }}
+               }
+             }, %Ctx{type: type}} ->
+              original_name =
+                objname
+                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                  sval
+                end)
+                |> Enum.join(".")
+
+              funcs = [
+                %{name: original_name, type: type},
+                %{name: newname, type: type}
+              ]
+
+              %ParseResult{acc | functions: funcs ++ acc.functions}
+
+            _ ->
+              acc
+          end
+        end)
+
+      {:ok,
+       %ParseResult{
+         result
+         | tables: Enum.uniq(result.tables),
+           cte_names: Enum.uniq(result.cte_names),
+           functions: Enum.uniq(result.functions),
+           table_aliases: Enum.uniq(result.table_aliases),
+           filter_columns: Enum.uniq(result.filter_columns)
+       }}
+    end
+  end
+
+  defp alias_to_name(%{relation: relation, schema: nil}), do: relation
+  defp alias_to_name(%{relation: relation, schema: schema}), do: "#{schema}.#{relation}"
+
+  @doc """
+  Returns a unique list of all table names referenced in the query results,
+  regardless of operation type (SELECT, DDL, DML).
+  """
+  def tables(%ParseResult{tables: tables}),
+    do: Enum.map(tables, & &1.name) |> Enum.uniq()
+
+  @doc """
+  Returns a unique list of table names that appear in SELECT operations
+  within the query results.
+  """
+  def select_tables(%ParseResult{tables: tables}),
+    do:
+      tables
+      |> Enum.filter(&(&1.type == :select))
+      |> Enum.map(& &1.name)
+      |> Enum.uniq()
+
+  @doc """
+  Returns a unique list of table names that appear in DDL operations
+  within the query results.
+  """
+  def ddl_tables(%ParseResult{tables: tables}),
+    do:
+      tables
+      |> Enum.filter(&(&1.type == :ddl))
+      |> Enum.map(& &1.name)
+      |> Enum.uniq()
+
+  @doc """
+  Returns a unique list of table names that appear in DML operations
+  within the query results.
+  """
+  def dml_tables(%ParseResult{tables: tables}),
+    do:
+      tables
+      |> Enum.filter(&(&1.type == :dml))
+      |> Enum.map(& &1.name)
+      |> Enum.uniq()
+
+  @doc """
+  Returns a unique list of all function names referenced in the query results,
+  regardless of operation type (CALL, DDL).
+  """
+  def functions(%ParseResult{functions: functions}),
+    do: Enum.map(functions, & &1.name) |> Enum.uniq()
+
+  @doc """
+  Returns a unique list of function names that are called (invoked)
+  within the query results.
+  """
+  def call_functions(%ParseResult{functions: functions}),
+    do:
+      functions
+      |> Enum.filter(&(&1.type == :call))
+      |> Enum.map(& &1.name)
+      |> Enum.uniq()
+
+  @doc """
+  Returns a unique list of function names that appear in DDL (Data Definition Language)
+  operations within the query results.
+  """
+  def ddl_functions(%ParseResult{functions: functions}),
+    do:
+      functions
+      |> Enum.filter(&(&1.type == :ddl))
+      |> Enum.map(& &1.name)
+      |> Enum.uniq()
+
+  @doc """
+  Returns a list of column references used in filter conditions (WHERE clauses) from the query.
+
+  Each column reference is returned as a tuple of {table_name, column_name}, where table_name
+  can be nil if the column reference doesn't specify a table.
+
+  ## Examples
+
+      iex> {:ok, result} = ExPgQuery.parse("SELECT * FROM users WHERE users.id = 1")
+      iex> ExPgQuery.filter_columns(result)
+      [{"users", "id"}]
+
+      iex> {:ok, result} = ExPgQuery.parse("SELECT * FROM users WHERE name = 'John'")
+      iex> ExPgQuery.filter_columns(result)
+      [{nil, "name"}]
+  """
+  def filter_columns(%ParseResult{filter_columns: filter_columns}),
+    do: filter_columns
+
+  @doc """
+  Returns a list of statement types found in the parsed query results.
+  """
+  def statement_types(%ParseResult{tree: %PgQuery.ParseResult{stmts: stmts}}) do
+    Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {stmt_type, _}}} ->
+      stmt_type
+    end)
   end
 end
