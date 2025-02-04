@@ -1,2 +1,8 @@
 ignore:
   - lib/ex_pg_query/native.ex
+
+coverage:
+  status:
+    project:
+      default:
+        informational: true
