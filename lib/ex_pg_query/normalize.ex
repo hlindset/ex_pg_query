@@ -1,4 +1,22 @@
 defmodule ExPgQuery.Normalize do
+  @moduledoc """
+  Provides SQL query normalization by replacing literal values with parameter placeholders.
+
+  Useful for query analysis, caching, and grouping similar queries together.
+
+  ## Examples
+
+      iex> ExPgQuery.Normalize.normalize("SELECT * FROM users WHERE id = 123")
+      {:ok, "SELECT * FROM users WHERE id = $1"}
+
+      iex> ExPgQuery.Normalize.normalize("SELECT * FROM users WHERE name = 'John' AND age > 25")
+      {:ok, "SELECT * FROM users WHERE name = $1 AND age > $2"}
+
+      iex> ExPgQuery.Normalize.normalize("CREATE ROLE postgres PASSWORD 'xyz'")
+      {:ok, "CREATE ROLE postgres PASSWORD $1"}
+
+  """
+
   @doc """
   Normalizes a SQL query by replacing literal values with placeholders.
 

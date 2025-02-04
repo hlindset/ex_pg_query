@@ -185,11 +185,12 @@ defmodule ExPgQuery.NodeTraversal do
   defp default_node_type(_node), do: :none
 
   @doc """
-  Traverses a ParseResult tree and returns a list of nodes with their context.
+  Traverses a `PgQuery.ParseResult` tree and returns a list of nodes with
+  their context.
 
   ## Parameters
 
-    * `parse_result` - PgQuery.ParseResult struct containing the parsed query
+    * `parse_result` - `PgQuery.ParseResult` struct containing the parsed query
 
   ## Returns
 

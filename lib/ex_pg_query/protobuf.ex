@@ -1,4 +1,14 @@
 defmodule ExPgQuery.Protobuf do
+  @moduledoc """
+  Handles conversion between SQL queries and Protocol Buffer AST representations.
+
+  ## Examples
+
+      iex> {:ok, protobuf} = ExPgQuery.Protobuf.from_sql("SELECT * FROM users")
+      iex> ExPgQuery.Protobuf.to_sql(protobuf)
+      {:ok, "SELECT * FROM users"}
+  """
+
   use Protox,
     files: ["./libpg_query/protobuf/pg_query.proto"],
     keep_unknown_fields: false
@@ -12,7 +22,7 @@ defmodule ExPgQuery.Protobuf do
 
   ## Returns
 
-    * `{:ok, protobuf}` - Successfully parsed PgQuery.ParseResult
+    * `{:ok, protobuf}` - Successfully parsed `PgQuery.ParseResult`
     * `{:error, error}` - Error with reason
 
   ## Examples
@@ -39,7 +49,7 @@ defmodule ExPgQuery.Protobuf do
 
   ## Returns
 
-    * PgQuery.ParseResult struct
+    * `PgQuery.ParseResult` struct
 
   ## Raises
 
@@ -58,7 +68,7 @@ defmodule ExPgQuery.Protobuf do
 
   ## Parameters
 
-    * `protobuf` - PgQuery.ParseResult struct containing query AST
+    * `protobuf` - `PgQuery.ParseResult` struct containing query AST
 
   ## Returns
 
@@ -82,7 +92,7 @@ defmodule ExPgQuery.Protobuf do
 
   ## Parameters
 
-    * `protobuf` - PgQuery.ParseResult struct containing query AST
+    * `protobuf` - `PgQuery.ParseResult` struct containing query AST
 
   ## Returns
 
@@ -103,12 +113,12 @@ defmodule ExPgQuery.Protobuf do
   @doc """
   Deparses a single statement node into SQL.
 
-  Takes a statement struct (like %SelectStmt{}, %InsertStmt{}, etc) and converts
-  it to its SQL representation.
+  Takes a statement struct (like `%SelectStmt{}`, `%InsertStmt{}`, etc) and
+  converts it to its SQL representation.
 
   ## Parameters
 
-    * `stmt` - PgQuery statement struct
+    * `stmt` - `PgQuery` statement struct
 
   ## Returns
 
@@ -150,7 +160,7 @@ defmodule ExPgQuery.Protobuf do
 
   ## Parameters
 
-    * `stmt` - PgQuery statement struct
+    * `stmt` - `PgQuery` statement struct
 
   ## Returns
 
@@ -176,7 +186,7 @@ defmodule ExPgQuery.Protobuf do
 
   ## Parameters
 
-    * `expr` - PgQuery expression struct
+    * `expr` - `PgQuery` expression struct
 
   ## Returns
 
@@ -199,7 +209,7 @@ defmodule ExPgQuery.Protobuf do
 
   ## Parameters
 
-    * `expr` - PgQuery expression struct
+    * `expr` - `PgQuery` expression struct
 
   ## Returns
 

@@ -7,14 +7,14 @@ into a parsetree, normalizing and fingerprinting.
 
 ### Features
 
-- Comprehensive SQL query analysis:
-  - Extract referenced tables (SELECT/DML/DDL)
-  - Identify Common Table Expressions (CTEs)
-  - List function calls and their types
-  - Find columns used in filter conditions (`WHERE`, `JOIN ... ON`, etc.)
+- Extract SQL query information:
+  - Referenced tables
+  - Common table expressions
+  - Function calls
+  - Columns used in filter conditions (`WHERE`, `JOIN ... ON`, etc.)
 - Query manipulation:
   - Smart query truncation
-  - Query fingerprinting for identifying similar queries
+  - Query fingerprinting for identifying structurally equivalent queries
   - Query normalization (replacing literals with placeholders)
 
 ## Installation
@@ -23,7 +23,7 @@ Not published to Hex yet.
 
 ## Usage
 
-### Basic Parsing
+### Basic Parsing Example
 
 ```elixir
 # Parse a query and analyze its structure
@@ -41,12 +41,17 @@ iex> ExPgQuery.table_aliases(result)
 # Get filter columns
 iex> ExPgQuery.filter_columns(result)
 [{"users", "age"}]
+
+# Get statement types
+iex> ExPgQuery.statement_types(result)
+[:select_stmt]
 ```
 
-### Query Categories
+### Extract Table References
+
+Extract table references by operation type.
 
 ```elixir
-# Extract tables by operation type
 iex> {:ok, result} = ExPgQuery.parse("""
 ...>   SELECT * FROM users;
 ...>   CREATE TABLE posts (id int);
@@ -75,10 +80,11 @@ iex> ExPgQuery.ddl_tables(result)
 ["films_recent"]
 ```
 
-### Function Analysis
+### Extract Function References
+
+Extract function references by operation type.
 
 ```elixir
-# Analyze function usage
 iex> {:ok, result} = ExPgQuery.parse("""
 ...>   SELECT count(*), my_func(col) FROM users;
 ...>   CREATE FUNCTION add(a int, b int) RETURNS int;
@@ -94,14 +100,20 @@ iex> ExPgQuery.ddl_functions(result)
 ["add"]
 ```
 
-### Query Normalization & Fingerprinting
+### Query Normalization
+
+Normalize queries by replacing literals with placeholders.
 
 ```elixir
-# Normalize query by replacing literals with placeholders
 iex> ExPgQuery.Normalize.normalize("SELECT * FROM users WHERE id = 123")
 {:ok, "SELECT * FROM users WHERE id = $1"}
+```
 
-# Generate fingerprint to identify similar queries
+### Fingerprinting
+
+Generate fingerprints for queries to identify structurally equivalent queries.
+
+```elixir
 iex> ExPgQuery.Fingerprint.fingerprint("SELECT * FROM users WHERE id = 123")
 {:ok, "a0ead580058af585"}
 
@@ -111,17 +123,14 @@ iex> ExPgQuery.Fingerprint.fingerprint("SELECT * FROM users WHERE id = 456")
 
 ### Query Truncation
 
+Intelligently truncate long queries.
+
 ```elixir
-# Intelligently truncate long queries
 iex> query = "SELECT very, many, columns FROM a_table WHERE x > 1"
 iex> {:ok, tree} = ExPgQuery.Protobuf.from_sql(query)
 iex> ExPgQuery.Truncator.truncate(tree, 34)
 {:ok, "SELECT ... FROM a_table WHERE ..."}
 ```
-
-## Documentation
-
-Detailed documentation with more examples and API references is available in the module docs.
 
 ## Contributing
 

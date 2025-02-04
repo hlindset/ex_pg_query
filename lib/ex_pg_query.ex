@@ -68,7 +68,7 @@ defmodule ExPgQuery do
 
   ## Returns
 
-    * `{:ok, ParseResult}` - Successfully parsed query with analysis
+    * `{:ok, ExPgQuery.ParseResult}` - Successfully parsed query with analysis
     * `{:error, reason}` - Error with reason
 
   ## Examples
@@ -468,7 +468,7 @@ defmodule ExPgQuery do
 
   ## Returns
 
-    * List of {table_name, column_name} tuples
+    * List of `{table_name, column_name}` tuples
       * `table_name` can be nil if table isn't specified in query
 
   ## Examples

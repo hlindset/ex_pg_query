@@ -1,4 +1,21 @@
 defmodule ExPgQuery.Fingerprint do
+  @moduledoc """
+  Generates fingerprints to identify structurally equivalent SQL queries.
+
+  Useful for e.g. query normalization and grouping similar queries together,
+  even when they contain different constants, strings, or parameter values.
+
+  ## Examples
+
+      iex> ExPgQuery.Fingerprint.fingerprint("SELECT * FROM users WHERE id = 1")
+      {:ok, "a0ead580058af585"}
+      iex> ExPgQuery.Fingerprint.fingerprint("SELECT * FROM users WHERE id = 2")
+      {:ok, "a0ead580058af585"}
+
+  The above queries generate the same fingerprint since they are structurally
+  identical, differing only in their literal values.
+  """
+
   @doc """
   Generates a fingerprint string that identifies structurally similar queries.
 

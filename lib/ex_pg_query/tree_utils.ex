@@ -1,6 +1,6 @@
 defmodule ExPgQuery.TreeUtils do
   @moduledoc """
-  Utilities for safely traversing and updating nested PgQuery AST structures.
+  Utilities for safely traversing and updating nested `PgQuery` AST structures.
   """
 
   @doc """
@@ -91,7 +91,7 @@ defmodule ExPgQuery.TreeUtils do
 
   ## Raises
 
-    * RuntimeError with the error message on failure
+    * `RuntimeError` with the error message on failure
 
   ## Examples
 

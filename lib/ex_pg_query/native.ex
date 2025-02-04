@@ -1,6 +1,6 @@
 defmodule ExPgQuery.Native do
   @moduledoc """
-  Provides native bindings to libpg_query C library functionality via NIFs.
+  Provides native bindings to `libpg_query` C library functionality via NIFs.
 
   This module contains the core SQL parsing and manipulation functions implemented
   in native code for performance. The functions are loaded as NIFs (Native
@@ -23,7 +23,7 @@ defmodule ExPgQuery.Native do
   @doc """
   Parses a SQL query into a Protocol Buffer representation.
 
-  Returns a serialized protobuf that can be decoded as a PgQuery.ParseResult.
+  Returns a serialized protobuf that can be decoded as a `PgQuery.ParseResult`.
 
   ## Parameters
 
@@ -95,7 +95,7 @@ defmodule ExPgQuery.Native do
   @doc """
   Performs lexical scanning of a SQL query into tokens.
 
-  Returns a serialized protobuf that can be decoded as a PgQuery.ScanResult.
+  Returns a serialized protobuf that can be decoded as a `PgQuery.ScanResult`.
 
   ## Parameters
 
@@ -119,7 +119,7 @@ defmodule ExPgQuery.Native do
   @doc """
   Normalizes a SQL query by replacing literal values with placeholders.
 
-  Converts literal values in the query to positional parameters ($1, $2, etc.)
+  Converts literal values in the query to positional parameters (`$1`, `$2`, etc.)
   while preserving the query structure.
 
   ## Parameters

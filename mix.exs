@@ -30,7 +30,7 @@ defmodule ExPgQuery.MixProject do
   defp docs do
     [
       # The main page in the docs
-      main: "ExPgQuery",
+      main: "README",
       extras: ["README.md"]
     ]
   end
