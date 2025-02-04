@@ -197,7 +197,7 @@ static ERL_NIF_TERM parse_protobuf(ErlNifEnv *env, int argc,
   }
 
   // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
+  char *query_str = (char *)enif_alloc(query_binary.size + 1);
   if (query_str == NULL) {
     DEBUG_LOG("Memory allocation failed for query string");
     return make_error(env, "memory allocation failed");
@@ -209,7 +209,7 @@ static ERL_NIF_TERM parse_protobuf(ErlNifEnv *env, int argc,
   // Parse the query
   DEBUG_LOG("Parsing query of size %zu", query_binary.size);
   PgQueryProtobufParseResult result = pg_query_parse_protobuf(query_str);
-  free(query_str);
+  enif_free(query_str);
 
   if (result.error != NULL) {
     DEBUG_LOG("Parse error: %s at position %d", result.error->message,
@@ -252,7 +252,7 @@ static ERL_NIF_TERM fingerprint(ErlNifEnv *env, int argc,
   }
 
   // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
+  char *query_str = (char *)enif_alloc(query_binary.size + 1);
   if (query_str == NULL) {
     DEBUG_LOG("Memory allocation failed for query string");
     return make_error(env, "memory allocation failed");
@@ -264,7 +264,7 @@ static ERL_NIF_TERM fingerprint(ErlNifEnv *env, int argc,
   // Calculate fingerprint
   DEBUG_LOG("Calculating fingerprint for query of size %zu", query_binary.size);
   PgQueryFingerprintResult result = pg_query_fingerprint(query_str);
-  free(query_str); // Free the query string as we don't need it anymore
+  enif_free(query_str); // Free the query string as we don't need it anymore
 
   if (result.error != NULL) {
     DEBUG_LOG("Fingerprint error: %s", result.error->message);
@@ -330,7 +330,7 @@ static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   }
 
   // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
+  char *query_str = (char *)enif_alloc(query_binary.size + 1);
   if (query_str == NULL) {
     DEBUG_LOG("Memory allocation failed for query string");
     return make_error(env, "memory allocation failed");
@@ -342,7 +342,7 @@ static ERL_NIF_TERM scan(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   // Scan the query
   DEBUG_LOG("Scanning query of size %zu", query_binary.size);
   PgQueryScanResult result = pg_query_scan(query_str);
-  free(query_str); // Free the query string as we don't need it anymore
+  enif_free(query_str); // Free the query string as we don't need it anymore
 
   if (result.error != NULL) {
     DEBUG_LOG("Scan error: %s", result.error->message);
@@ -384,7 +384,7 @@ static ERL_NIF_TERM normalize(ErlNifEnv *env, int argc,
   }
 
   // Create null-terminated string from input
-  char *query_str = (char *)malloc(query_binary.size + 1);
+  char *query_str = (char *)enif_alloc(query_binary.size + 1);
   if (query_str == NULL) {
     DEBUG_LOG("Memory allocation failed for query string");
     return make_error(env, "memory allocation failed");
@@ -396,7 +396,7 @@ static ERL_NIF_TERM normalize(ErlNifEnv *env, int argc,
   // Normalize the query
   DEBUG_LOG("Normalizing query of size %zu", query_binary.size);
   PgQueryNormalizeResult result = pg_query_normalize(query_str);
-  free(query_str);
+  enif_free(query_str);
 
   if (result.error != NULL) {
     DEBUG_LOG("Normalize error: %s", result.error->message);
