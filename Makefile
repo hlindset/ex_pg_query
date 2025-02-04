@@ -12,7 +12,7 @@ ifeq ($(shell uname -s),Darwin)
     LDFLAGS += -undefined dynamic_lookup
 endif
 
-.PHONY: all ex_pg_query clean update-libpg_query
+.PHONY: all ex_pg_query clean
 
 all: priv/ex_pg_query.so
 
