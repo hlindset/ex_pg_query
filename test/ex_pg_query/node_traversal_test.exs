@@ -11,14 +11,52 @@ defmodule ExPgQuery.NodeTraversalTest do
       {:ok, parse_result} = Parser.parse("SELECT users.id from users")
       nodes = NodeTraversal.nodes(parse_result.protobuf)
       locations = Enum.map(nodes, fn {_node, ctx} -> ctx.location end)
-      assert Enum.sort(locations) == Enum.sort([
-        [:stmts, 0, :stmt, :select_stmt],
-        [:stmts, 0, :stmt, :select_stmt, :from_clause, 0, :range_var],
-        [:stmts, 0, :stmt, :select_stmt, :target_list, 0, :res_target],
-        [:stmts, 0, :stmt, :select_stmt, :target_list, 0, :res_target, :val, :column_ref],
-        [:stmts, 0, :stmt, :select_stmt, :target_list, 0, :res_target, :val, :column_ref, :fields, 0, :string],
-        [:stmts, 0, :stmt, :select_stmt, :target_list, 0, :res_target, :val, :column_ref, :fields, 1, :string]
-      ])
+
+      assert Enum.sort(locations) ==
+               Enum.sort([
+                 [:stmts, 0, :stmt, :select_stmt],
+                 [:stmts, 0, :stmt, :select_stmt, :from_clause, 0, :range_var],
+                 [:stmts, 0, :stmt, :select_stmt, :target_list, 0, :res_target],
+                 [
+                   :stmts,
+                   0,
+                   :stmt,
+                   :select_stmt,
+                   :target_list,
+                   0,
+                   :res_target,
+                   :val,
+                   :column_ref
+                 ],
+                 [
+                   :stmts,
+                   0,
+                   :stmt,
+                   :select_stmt,
+                   :target_list,
+                   0,
+                   :res_target,
+                   :val,
+                   :column_ref,
+                   :fields,
+                   0,
+                   :string
+                 ],
+                 [
+                   :stmts,
+                   0,
+                   :stmt,
+                   :select_stmt,
+                   :target_list,
+                   0,
+                   :res_target,
+                   :val,
+                   :column_ref,
+                   :fields,
+                   1,
+                   :string
+                 ]
+               ])
     end
 
     test "tracks table aliases in simple joins" do
