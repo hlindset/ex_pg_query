@@ -169,13 +169,15 @@ defmodule ExPgQuery.TruncatorTest do
 
   defp assert_truncate_eq(query, truncate_length, expected) do
     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    {:ok, result} = Truncator.truncate(parse_result, truncate_length)
-    assert result == expected
+    nodes = ExPgQuery.NodeTraversal.nodes(parse_result)
+    {:ok, result} = Truncator.truncate(parse_result, nodes, truncate_length)
+    assert expected == result
   end
 
   defp assert_truncate_length(query, truncate_length, expected) do
     {:ok, parse_result} = ExPgQuery.parse_protobuf(query)
-    {:ok, result} = Truncator.truncate(parse_result, truncate_length)
+    nodes = ExPgQuery.NodeTraversal.nodes(parse_result)
+    {:ok, result} = Truncator.truncate(parse_result, nodes, truncate_length)
     assert String.length(result) == expected
   end
 end

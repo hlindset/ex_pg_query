@@ -196,8 +196,8 @@ defmodule ExPgQuery.NodeTraversal do
 
   ## Example
 
-      iex> {:ok, result} = ExPgQuery.Parser.parse("SELECT * FROM users")
-      iex> ExPgQuery.NodeTraversal.nodes(result.protobuf)
+      iex> {:ok, parse_result} = ExPgQuery.parse_protobuf("SELECT * FROM users")
+      iex> ExPgQuery.NodeTraversal.nodes(parse_result)
   """
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
     Enum.flat_map(Enum.with_index(stmts), fn
