@@ -7,11 +7,11 @@
 #include "../libpg_query/protobuf/pg_query.pb-c.h"
 #include "../libpg_query/vendor/protobuf-c/protobuf-c.h"
 
-#ifndef EX_PG_QUERY_MAX_SQL_LENGTH
+#ifndef MAX_SQL_LENGTH
 #define MAX_SQL_LENGTH (16 * 1024 * 1024)
 #endif
 
-#ifndef EX_PG_QUERY_MAX_PROTOBUF_LENGTH
+#ifndef MAX_PROTOBUF_LENGTH
 #define MAX_PROTOBUF_LENGTH (32 * 1024 * 1024)
 #endif
 
