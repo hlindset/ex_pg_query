@@ -161,6 +161,7 @@ defmodule ExPgQuery.NodeTraversal do
     @type stmt_type :: :none | :select | :dml | :ddl | :call
 
     defstruct type: :none,
+              location: [],
               current_cte: nil,
               is_recursive_cte: false,
               subselect_item: false,
@@ -195,13 +196,16 @@ defmodule ExPgQuery.NodeTraversal do
 
   ## Example
 
-      iex> {:ok, result} = ExPgQuery.Parser.parse("SELECT * FROM users")
-      iex> ExPgQuery.NodeTraversal.nodes(result.protobuf)
+      iex> {:ok, parse_result} = ExPgQuery.parse_protobuf("SELECT * FROM users")
+      iex> ExPgQuery.NodeTraversal.nodes(parse_result)
   """
   def nodes(%PgQuery.ParseResult{stmts: stmts}) do
-    Enum.flat_map(stmts, fn
-      %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {_type, node}}} ->
-        traverse_node(node, %Ctx{type: default_node_type(node)})
+    Enum.flat_map(Enum.with_index(stmts), fn
+      {%PgQuery.RawStmt{stmt: %PgQuery.Node{node: {type, node}}}, idx} ->
+        traverse_node(node, %Ctx{
+          type: default_node_type(node),
+          location: [:stmts, idx, :stmt, type]
+        })
         |> List.flatten()
 
       _ ->
@@ -211,23 +215,30 @@ defmodule ExPgQuery.NodeTraversal do
 
   # Handles lists of nodes by mapping traverse_node over each element
   defp traverse_node(node_list, ctx) when is_list(node_list) do
-    Enum.map(node_list, &traverse_node(&1, ctx))
+    Enum.map(Enum.with_index(node_list), fn {node, idx} ->
+      traverse_node(node, append_ctx_location(ctx, idx))
+    end)
   end
 
   # Unwraps PgQuery.Node wrapper and continues traversal
-  defp traverse_node(%PgQuery.Node{node: {_type, node}}, ctx) do
-    traverse_node(node, ctx)
+  defp traverse_node(%PgQuery.Node{node: {type, node}}, ctx) do
+    traverse_node(node, append_ctx_location(ctx, type))
   end
 
   # Main traversal function for struct nodes
   defp traverse_node(node, ctx) when is_struct(node) do
-    updated_ctx = ctx_for_node(node, ctx)
+    updated_ctx = ctx_for_node(ctx, node)
 
     children =
       msg_to_field_nodes(node)
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
       |> Enum.map(fn {key, value} ->
-        traverse_node(value, ctx_for_field(node, key, updated_ctx))
+        field_ctx =
+          updated_ctx
+          |> ctx_for_field(node, key)
+          |> append_ctx_location(key)
+
+        traverse_node(value, field_ctx)
       end)
 
     [{node, updated_ctx} | children]
@@ -235,8 +246,13 @@ defmodule ExPgQuery.NodeTraversal do
 
   # Context Update Functions
 
+  # Updates location context
+  defp append_ctx_location(%Ctx{location: location} = ctx, location_segment) do
+    %Ctx{ctx | location: Enum.reverse([location_segment | Enum.reverse(location)])}
+  end
+
   # Updates context for SELECT statements, handling aliases and CTEs
-  defp ctx_for_node(%PgQuery.SelectStmt{} = select_stmt, ctx) do
+  defp ctx_for_node(ctx, %PgQuery.SelectStmt{} = select_stmt) do
     table_aliases =
       case ctx do
         # when select statement is a subquery, keep previous aliases
@@ -250,46 +266,46 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   # SubLink (subqueries)
-  defp ctx_for_node(%PgQuery.SubLink{}, ctx),
+  defp ctx_for_node(ctx, %PgQuery.SubLink{}),
     do: %Ctx{ctx | subselect_item: true}
 
   # RangeSubselect (+ lateral)
-  defp ctx_for_node(%PgQuery.RangeSubselect{lateral: true}, ctx),
+  defp ctx_for_node(ctx, %PgQuery.RangeSubselect{lateral: true}),
     do: %Ctx{ctx | subselect_item: true}
 
-  defp ctx_for_node(%PgQuery.InsertStmt{} = insert_stmt, ctx) do
+  defp ctx_for_node(ctx, %PgQuery.InsertStmt{} = insert_stmt) do
     cte_names = collect_cte_names(insert_stmt.with_clause)
     %Ctx{ctx | cte_names: ctx.cte_names ++ cte_names}
   end
 
-  defp ctx_for_node(%PgQuery.UpdateStmt{} = update_stmt, ctx) do
+  defp ctx_for_node(ctx, %PgQuery.UpdateStmt{} = update_stmt) do
     table_aliases = collect_update_aliases(update_stmt)
     cte_names = collect_cte_names(update_stmt.with_clause)
     %Ctx{ctx | table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
-  defp ctx_for_node(%PgQuery.DeleteStmt{} = delete_stmt, ctx) do
+  defp ctx_for_node(ctx, %PgQuery.DeleteStmt{} = delete_stmt) do
     cte_names = collect_cte_names(delete_stmt.with_clause)
     %Ctx{ctx | cte_names: ctx.cte_names ++ cte_names}
   end
 
-  defp ctx_for_node(%PgQuery.MergeStmt{} = merge_stmt, ctx) do
+  defp ctx_for_node(ctx, %PgQuery.MergeStmt{} = merge_stmt) do
     table_aliases = collect_merge_aliases(merge_stmt)
     cte_names = collect_cte_names(merge_stmt.with_clause)
     %Ctx{ctx | table_aliases: table_aliases, cte_names: ctx.cte_names ++ cte_names}
   end
 
-  defp ctx_for_node(%PgQuery.FuncCall{}, ctx) do
+  defp ctx_for_node(ctx, %PgQuery.FuncCall{}) do
     %Ctx{ctx | type: :call}
   end
 
-  defp ctx_for_node(%PgQuery.WithClause{recursive: recursive}, ctx),
+  defp ctx_for_node(ctx, %PgQuery.WithClause{recursive: recursive}),
     do: %Ctx{ctx | is_recursive_cte: recursive}
 
-  defp ctx_for_node(%PgQuery.CommonTableExpr{ctename: ctename}, ctx),
+  defp ctx_for_node(ctx, %PgQuery.CommonTableExpr{ctename: ctename}),
     do: %Ctx{ctx | current_cte: ctename}
 
-  defp ctx_for_node(_node, ctx), do: ctx
+  defp ctx_for_node(ctx, _node), do: ctx
 
   # ctx_for_field
   #
@@ -300,7 +316,7 @@ defmodule ExPgQuery.NodeTraversal do
   # out the context it is used in.
 
   # SELECT
-  defp ctx_for_field(%PgQuery.SelectStmt{}, field, ctx) do
+  defp ctx_for_field(ctx, %PgQuery.SelectStmt{}, field) do
     case field do
       :where_clause -> %Ctx{ctx | condition_item: true}
       :into_clause -> %Ctx{ctx | type: :ddl, from_clause_item: true}
@@ -310,7 +326,7 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   # DELETE
-  defp ctx_for_field(%PgQuery.DeleteStmt{}, field, ctx) do
+  defp ctx_for_field(ctx, %PgQuery.DeleteStmt{}, field) do
     case field do
       :where_clause -> %Ctx{ctx | type: :select, condition_item: true}
       :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
@@ -320,7 +336,7 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   # UPDATE
-  defp ctx_for_field(%PgQuery.UpdateStmt{}, field, ctx) do
+  defp ctx_for_field(ctx, %PgQuery.UpdateStmt{}, field) do
     case field do
       :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
       :where_clause -> %Ctx{ctx | type: :select, condition_item: true}
@@ -330,7 +346,7 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   # MERGE
-  defp ctx_for_field(%PgQuery.MergeStmt{}, field, ctx) do
+  defp ctx_for_field(ctx, %PgQuery.MergeStmt{}, field) do
     case field do
       :join_condition -> %Ctx{ctx | condition_item: true}
       :relation -> %Ctx{ctx | type: :dml, from_clause_item: true}
@@ -340,7 +356,7 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   # MERGE: WHEN clause condition
-  defp ctx_for_field(%PgQuery.MergeWhenClause{}, field, ctx) do
+  defp ctx_for_field(ctx, %PgQuery.MergeWhenClause{}, field) do
     case field do
       :condition -> %Ctx{ctx | condition_item: true}
       _ -> ctx
@@ -348,7 +364,7 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   # CREATE INDEX
-  defp ctx_for_field(%PgQuery.IndexStmt{}, field, ctx) do
+  defp ctx_for_field(ctx, %PgQuery.IndexStmt{}, field) do
     case field do
       :where_clause -> %Ctx{ctx | type: :select, condition_item: true}
       :relation -> %Ctx{ctx | type: :ddl, from_clause_item: true}
@@ -357,63 +373,63 @@ defmodule ExPgQuery.NodeTraversal do
   end
 
   # INSERT
-  defp ctx_for_field(%PgQuery.InsertStmt{}, :relation, ctx),
+  defp ctx_for_field(ctx, %PgQuery.InsertStmt{}, :relation),
     do: %Ctx{ctx | type: :dml, from_clause_item: true}
 
   # CREATE TABLE
-  defp ctx_for_field(%PgQuery.CreateStmt{}, :relation, ctx),
+  defp ctx_for_field(ctx, %PgQuery.CreateStmt{}, :relation),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # CREATE TABLE ... AS
-  defp ctx_for_field(%PgQuery.CreateTableAsStmt{}, :into, ctx),
+  defp ctx_for_field(ctx, %PgQuery.CreateTableAsStmt{}, :into),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # ALTER TABLE
-  defp ctx_for_field(%PgQuery.AlterTableStmt{}, :relation, ctx),
+  defp ctx_for_field(ctx, %PgQuery.AlterTableStmt{}, :relation),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # COPY
-  defp ctx_for_field(%PgQuery.CopyStmt{}, :relation, ctx),
+  defp ctx_for_field(ctx, %PgQuery.CopyStmt{}, :relation),
     do: %Ctx{ctx | type: :select, from_clause_item: true}
 
   # CREATE RULE
-  defp ctx_for_field(%PgQuery.RuleStmt{}, :relation, ctx),
+  defp ctx_for_field(ctx, %PgQuery.RuleStmt{}, :relation),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # GRANT
-  defp ctx_for_field(%PgQuery.GrantStmt{objtype: :OBJECT_TABLE}, :objects, ctx),
+  defp ctx_for_field(ctx, %PgQuery.GrantStmt{objtype: :OBJECT_TABLE}, :objects),
     do: %Ctx{ctx | from_clause_item: true}
 
   # TRUNCATE
-  defp ctx_for_field(%PgQuery.TruncateStmt{}, :relations, ctx),
+  defp ctx_for_field(ctx, %PgQuery.TruncateStmt{}, :relations),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # VACUUM
-  defp ctx_for_field(%PgQuery.VacuumStmt{}, :rels, ctx),
+  defp ctx_for_field(ctx, %PgQuery.VacuumStmt{}, :rels),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # CREATE VIEW
-  defp ctx_for_field(%PgQuery.ViewStmt{}, :view, ctx),
+  defp ctx_for_field(ctx, %PgQuery.ViewStmt{}, :view),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # REFRESH MATERIALIZED VIEW
-  defp ctx_for_field(%PgQuery.RefreshMatViewStmt{}, :relation, ctx),
+  defp ctx_for_field(ctx, %PgQuery.RefreshMatViewStmt{}, :relation),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # CREATE TRIGGER
-  defp ctx_for_field(%PgQuery.CreateTrigStmt{}, :relation, ctx),
+  defp ctx_for_field(ctx, %PgQuery.CreateTrigStmt{}, :relation),
     do: %Ctx{ctx | type: :ddl, from_clause_item: true}
 
   # LOCK TABLE
-  defp ctx_for_field(%PgQuery.LockStmt{}, :relations, ctx),
+  defp ctx_for_field(ctx, %PgQuery.LockStmt{}, :relations),
     do: %Ctx{ctx | type: :select, from_clause_item: true}
 
   # JOIN
-  defp ctx_for_field(%PgQuery.JoinExpr{}, :quals, ctx),
+  defp ctx_for_field(ctx, %PgQuery.JoinExpr{}, :quals),
     do: %Ctx{ctx | condition_item: true}
 
   # noop fallback
-  defp ctx_for_field(_node, _field, ctx), do: ctx
+  defp ctx_for_field(ctx, _node, _field), do: ctx
 
   # Extracts message fields that contain nested nodes
   defp msg_to_field_nodes(msg) do

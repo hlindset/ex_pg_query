@@ -30,6 +30,7 @@ defmodule ExPgQuery.Parser do
 
   alias ExPgQuery.NodeTraversal
   alias ExPgQuery.NodeTraversal.Ctx
+  alias ExPgQuery.Truncator
 
   defmodule Result do
     @moduledoc """
@@ -37,7 +38,8 @@ defmodule ExPgQuery.Parser do
     functions, CTEs, and aliases found in the query.
     """
 
-    defstruct protobuf: nil,
+    defstruct tree: nil,
+              nodes: [],
               tables: [],
               table_aliases: [],
               cte_names: [],
@@ -53,9 +55,9 @@ defmodule ExPgQuery.Parser do
   """
   def parse(query) do
     with {:ok, binary} <- ExPgQuery.Native.parse_protobuf(query),
-         {:ok, protobuf} <- Protox.decode(binary, PgQuery.ParseResult) do
-      nodes = NodeTraversal.nodes(protobuf)
-      initial_result = %Result{protobuf: protobuf}
+         {:ok, tree} <- Protox.decode(binary, PgQuery.ParseResult) do
+      nodes = NodeTraversal.nodes(tree)
+      initial_result = %Result{tree: tree, nodes: nodes}
 
       result =
         Enum.reduce(nodes, initial_result, fn node, acc ->
@@ -355,9 +357,13 @@ defmodule ExPgQuery.Parser do
   @doc """
   Returns a list of statement types found in the parsed query results.
   """
-  def statement_types(%Result{protobuf: %PgQuery.ParseResult{stmts: stmts}}) do
+  def statement_types(%Result{tree: %PgQuery.ParseResult{stmts: stmts}}) do
     Enum.map(stmts, fn %PgQuery.RawStmt{stmt: %PgQuery.Node{node: {stmt_type, _}}} ->
       stmt_type
     end)
+  end
+
+  def truncate(%Result{tree: tree, nodes: nodes}, max_length) do
+    Truncator.truncate(tree, nodes, max_length)
   end
 end
