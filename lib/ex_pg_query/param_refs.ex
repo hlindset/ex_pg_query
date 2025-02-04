@@ -32,6 +32,9 @@ defmodule ExPgQuery.ParamRefs do
 
           {length, location} =
             cond do
+              # xxx: not sure when the following happens or even if it can happen.
+              #      the behaviour is copied from the ruby library, but the test
+              #      suite didn't cause this branch to be executed
               param_loc == -1 ->
                 {length, type_name_node.location}
 
