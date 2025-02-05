@@ -43,6 +43,7 @@ defmodule ExPgQuery.Truncator do
          fields: [%PgQuery.Node{node: {:string, %PgQuery.String{sval: @short_ellipsis}}}]
        }}
   }
+  @dummy_column_ref_list [@dummy_column_ref]
   @dummy_ctequery_node %PgQuery.Node{
     node: {:select_stmt, %PgQuery.SelectStmt{where_clause: @dummy_column_ref, op: :SETOP_NONE}}
   }
@@ -194,6 +195,9 @@ defmodule ExPgQuery.Truncator do
       %PossibleTruncation{node_type: :target_list, location: location} ->
         TreeUtils.put_in_tree(tree, location, @dummy_unnamed_target_list)
 
+      %PossibleTruncation{node_type: :group_clause, location: location} ->
+        TreeUtils.put_in_tree(tree, location, @dummy_column_ref_list)
+
       %PossibleTruncation{node_type: :where_clause, location: location} ->
         TreeUtils.put_in_tree(tree, location, @dummy_column_ref)
 
@@ -239,6 +243,20 @@ defmodule ExPgQuery.Truncator do
       {:ok,
        query
        |> String.replace_leading("UPDATE x SET", "")
+       |> String.trim_leading()
+       |> String.length()}
+    end
+  end
+
+  defp group_clause_length(node) do
+    with {:ok, query} <-
+           Protobuf.stmt_to_sql(%PgQuery.SelectStmt{
+             op: :SETOP_NONE,
+             group_clause: node
+           }) do
+      {:ok,
+       query
+       |> String.replace_leading("SELECT GROUP BY", "")
        |> String.trim_leading()
        |> String.length()}
     end
@@ -314,6 +332,24 @@ defmodule ExPgQuery.Truncator do
                   parent_node: parent_node,
                   location: location,
                   node_type: :target_list,
+                  length: length
+                }
+                | acc
+              ]
+
+            {:error, _} ->
+              acc
+          end
+
+        # GROUP BY clause
+        {:group_clause, node} ->
+          case group_clause_length(node) do
+            {:ok, length} ->
+              [
+                %PossibleTruncation{
+                  parent_node: parent_node,
+                  location: location,
+                  node_type: :group_clause,
                   length: length
                 }
                 | acc
