@@ -97,6 +97,13 @@ defmodule ExPgQuery.TruncatorTest do
       assert_truncate_eq(query, 30, "SELECT ... FROM users")
     end
 
+    test "truncates SELECT statement group list" do
+      query =
+        "SELECT count(*) FROM foo GROUP BY foo.bar, foo.baz, foo.bing"
+
+      assert_truncate_eq(query, 40, "SELECT count(*) FROM foo GROUP BY ...")
+    end
+
     test "truncates WHERE clause" do
       query = """
       SELECT * FROM users
