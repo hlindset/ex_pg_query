@@ -1,0 +1,88 @@
+name: Precompile NIFs
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  # push:
+  #   tags:
+  #     - "v*"
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: "prod"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Elixir
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+      - name: Install Protoc
+        uses: arduino/setup-protoc@f4d5893b897028ff5739576ea0409746887fa536 # v3
+      - name: Restore dependencies cache
+        uses: actions/cache@v3
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential automake autoconf \
+            pkg-config bc m4 unzip zip \
+            gcc-aarch64-linux-gnugcc-arm-linux-gnueabihf
+      - name: Get musl cross-compilers
+        run: |
+          for musl_arch in x86_64 aarch64 riscv64
+          do
+            wget "https://musl.cc/${musl_arch}-linux-musl-cross.tgz" -O "${musl_arch}-linux-musl-cross.tgz"
+            tar -xf "${musl_arch}-linux-musl-cross.tgz"
+          done
+      - name: Run tests
+        run: |
+          # Optional, use this if you have musl targets to compile
+          for musl_arch in x86_64 aarch64 riscv64
+          do
+            export PATH="$(pwd)/${musl_arch}-linux-musl-cross/bin:${PATH}"
+          done
+
+          mix deps.get
+          MIX_ENV=test mix test
+      - name: Create precompiled library
+        run: |
+          export ELIXIR_MAKE_CACHE_DIR=$(pwd)/cache
+          mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
+          mix elixir_make.precompile
+
+  macos:
+    runs-on: macos-11
+    env:
+      MIX_ENV: "prod"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Elixir
+        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+      - name: Install Protoc
+        uses: arduino/setup-protoc@f4d5893b897028ff5739576ea0409746887fa536 # v3
+      - name: Restore dependencies cache
+        uses: actions/cache@v3
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - name: Run tests
+        run: |
+          mix deps.get
+          MIX_ENV=test mix test
+      - name: Create precompiled library
+        run: |
+          export ELIXIR_MAKE_CACHE_DIR=$(pwd)/cache
+          mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
+          mix elixir_make.precompile
