@@ -28,7 +28,7 @@ defmodule ExPgQuery.MixProject do
       make_precompiler_url:
         "https://github.com/hlindset/ex_pg_query/releases/download/v#{@version}/@{artefact_filename}",
       make_precompiler_filename: "ex_pg_query",
-      make_precompiler_nif_versions: [versions: ["2.14", "2.15", "2.16"]],
+      make_precompiler_nif_versions: [versions: ["2.15", "2.16", "2.17"]],
       # Docs
       name: "ExPgQuery",
       source_url: "https://github.com/hlindset/ex_pg_query",
