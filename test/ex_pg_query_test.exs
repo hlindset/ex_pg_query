@@ -881,7 +881,7 @@ defmodule ExPgQueryTest do
     test "parses really deep queries (3)" do
       query_text =
         "SELECT * FROM foo " <>
-          Enum.join(Enum.map(1..100, &"JOIN foo_#{&1} ON foo.id = foo_#{&1}.foo_id"), " ")
+          Enum.map_join(1..100, " ", &"JOIN foo_#{&1} ON foo.id = foo_#{&1}.foo_id")
 
       {:ok, result} = ExPgQuery.parse(query_text)
       assert_select_tables_eq(result, Enum.map(1..100, &"foo_#{&1}") ++ ["foo"])

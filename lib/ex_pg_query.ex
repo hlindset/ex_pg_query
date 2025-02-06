@@ -241,10 +241,11 @@ defmodule ExPgQuery do
             when is_struct(node, PgQuery.FuncCall) or is_struct(node, PgQuery.CreateFunctionStmt) ->
               function =
                 node.funcname
-                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                |> Enum.map_join(".", fn %PgQuery.Node{
+                                           node: {:string, %PgQuery.String{sval: sval}}
+                                         } ->
                   sval
                 end)
-                |> Enum.join(".")
 
               %ParseResult{acc | functions: [%{name: function, type: type} | acc.functions]}
 
@@ -261,10 +262,11 @@ defmodule ExPgQuery do
              }, %Ctx{type: type}} ->
               original_name =
                 objname
-                |> Enum.map(fn %PgQuery.Node{node: {:string, %PgQuery.String{sval: sval}}} ->
+                |> Enum.map_join(".", fn %PgQuery.Node{
+                                           node: {:string, %PgQuery.String{sval: sval}}
+                                         } ->
                   sval
                 end)
-                |> Enum.join(".")
 
               funcs = [
                 %{name: original_name, type: type},
