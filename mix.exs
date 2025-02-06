@@ -44,7 +44,9 @@ defmodule ExPgQuery.MixProject do
       homepage_url: "https://github.com/hlindset/ex_pg_query",
       links: %{
         "GitHub" => "https://github.com/hlindset/ex_pg_query"
-      }
+      },
+      files: ~w(lib priv .formatter.exs mix.exs README* LICENSE*
+        CHANGELOG* src checksum.exs)
     ]
   end
 
