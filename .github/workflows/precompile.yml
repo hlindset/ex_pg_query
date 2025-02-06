@@ -101,8 +101,9 @@ jobs:
             [tools]
             elixir = "${{ matrix.pair.elixir }}"
             erlang = "${{ matrix.pair.otp }}"
-      - name: Install hex & rebar
+      - name: Install utilities
         run: |
+          brew install protobuf
           mix local.hex --force
           mix local.rebar --force
       - name: Restore dependencies cache
