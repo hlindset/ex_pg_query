@@ -13,6 +13,8 @@ defmodule ExPgQuery.Protobuf do
     files: ["./libpg_query/protobuf/pg_query.proto"],
     keep_unknown_fields: false
 
+  @postgres_query_version 170_000
+
   @doc """
   Parses a SQL query into a Protocol Buffer AST.
 
@@ -142,13 +144,12 @@ defmodule ExPgQuery.Protobuf do
 
   """
   def stmt_to_sql(stmt) do
-    # todo: don't hardcode version
     %{name: oneof_name} =
       PgQuery.Node.fields_defs() |> Enum.find(&(&1.type == {:message, stmt.__struct__}))
 
     protobuf =
       %PgQuery.ParseResult{
-        version: 170_000,
+        version: @postgres_query_version,
         stmts: [%PgQuery.RawStmt{stmt: %PgQuery.Node{node: {oneof_name, stmt}}}]
       }
 
