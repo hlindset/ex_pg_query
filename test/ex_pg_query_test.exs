@@ -888,18 +888,28 @@ defmodule ExPgQueryTest do
     end
 
     test "parses subquery alias scopes correctly" do
-      ExPgQuery.parse("""
-      SELECT e.name
-      FROM employees AS e
-      WHERE e.dept_id IN (
-          SELECT d.id
-          FROM departments AS d
-          WHERE d.location = e.location
-      )
-      """)
+      {:ok, result} =
+        ExPgQuery.parse("""
+        SELECT e.name
+        FROM employees AS e
+        WHERE e.dept_id IN (
+            SELECT d.id
+            FROM departments AS d
+            WHERE d.location = e.location
+        )
+        """)
 
-      # todo: make sure all aliases resolve
-      assert true
+      assert_table_aliases_eq(result, [
+        %{alias: "e", relation: "employees", location: 19, schema: nil},
+        %{alias: "d", relation: "departments", location: 80, schema: nil}
+      ])
+
+      assert_filter_columns_eq(result, [
+        {"employees", "dept_id"},
+        {"departments", "id"},
+        {"departments", "location"},
+        {"employees", "location"}
+      ])
     end
   end
 
