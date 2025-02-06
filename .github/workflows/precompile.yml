@@ -22,9 +22,6 @@ jobs:
       matrix:
         include:
           - pair:
-              elixir: "1.13.4-otp-22"
-              otp: "22.3.4.27"
-          - pair:
               elixir: "1.16.3-otp-24"
               otp: "24.3.4.17"
           - pair:
@@ -89,9 +86,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - pair:
-              elixir: "1.13.4-otp-22"
-              otp: "22.3.4.27"
           - pair:
               elixir: "1.16.3-otp-24"
               otp: "24.3.4.17"
