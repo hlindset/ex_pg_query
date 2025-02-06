@@ -33,7 +33,7 @@ defmodule ExPgQuery.ParamRefs do
 
   """
   def param_refs(tree) do
-    TreeWalker.walk(tree, [], fn parent_node, field_name, {node, path}, acc ->
+    TreeWalker.walk(tree, [], fn _parent_node, _field_name, {node, path}, acc ->
       case node do
         %PgQuery.ParamRef{} ->
           case Enum.take(path, -3) do
