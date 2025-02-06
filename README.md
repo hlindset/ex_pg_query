@@ -132,6 +132,12 @@ iex> ExPgQuery.Truncator.truncate(tree, 34)
 {:ok, "SELECT ... FROM a_table WHERE ..."}
 ```
 
+## License
+
+This library is distributed under the terms of the [MIT license](LICENSE).
+
+The libpg_query snapshot is distributed under the BSD 3-Clause license. See [libpg_query/LICENSE](libpg_query/LICENSE).
+
 ## Contributing
 
 Bug reports and pull requests are welcome.
