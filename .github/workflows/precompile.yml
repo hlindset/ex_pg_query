@@ -97,6 +97,7 @@ jobs:
       - name: Install erlang and elixir
         run: |
           brew install mise protobuf
+          mise activate
           mise use -g erlang@${OTP_VERSION}
           mise use -g elixir@${ELIXIR_VERSION}
           mix local.hex --force
