@@ -59,7 +59,7 @@ jobs:
           mix elixir_make.precompile
 
   macos:
-    runs-on: macos-11
+    runs-on: macos-latest
     env:
       MIX_ENV: "prod"
     steps:
