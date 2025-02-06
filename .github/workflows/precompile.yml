@@ -64,13 +64,11 @@ jobs:
       MIX_ENV: "prod"
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Elixir
-        uses: erlef/setup-beam@5304e04ea2b355f03681464e683d92e3b2f18451 # v1
-        with:
-          elixir-version: "1.18"
-          otp-version: "27"
-      - name: Install Protoc
-        uses: arduino/setup-protoc@f4d5893b897028ff5739576ea0409746887fa536 # v3
+      - name: Install erlang and elixir
+        run: |
+          brew install erlang elixir protobuf
+          mix local.hex --force
+          mix local.rebar --force
       - name: Restore dependencies cache
         uses: actions/cache@v3
         with:
