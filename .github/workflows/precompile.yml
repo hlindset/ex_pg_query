@@ -95,11 +95,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install erlang and elixir
+        uses: jdx/mise-action@v2
+        with:
+          mise_toml: |
+            [tools]
+            elixir = "${{ matrix.pair.elixir }}"
+            erlang = "${{ matrix.pair.otp }}"
+      - name: Install hex & rebar
         run: |
-          brew install mise protobuf
-          eval "$(mise activate bash)"
-          mise use -g erlang@${OTP_VERSION}
-          mise use -g elixir@${ELIXIR_VERSION}
           mix local.hex --force
           mix local.rebar --force
       - name: Restore dependencies cache
