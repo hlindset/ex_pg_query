@@ -57,22 +57,24 @@ defmodule ExPgQuery.TreeUtils do
   end
 
   def update_in_tree(tree, [key | rest], update_fn) do
-    with {:ok, value} <- Map.fetch(tree, key) do
-      case value do
-        {oneof_type, struct} when is_atom(oneof_type) ->
-          case update_in_tree(struct, rest, update_fn) do
-            {:ok, updated} -> {:ok, Map.put(tree, key, {oneof_type, updated})}
-            {:error, reason} -> {:error, reason}
-          end
+    case Map.fetch(tree, key) do
+      {:ok, value} ->
+        case value do
+          {oneof_type, struct} when is_atom(oneof_type) ->
+            case update_in_tree(struct, rest, update_fn) do
+              {:ok, updated} -> {:ok, Map.put(tree, key, {oneof_type, updated})}
+              {:error, reason} -> {:error, reason}
+            end
 
-        value ->
-          case update_in_tree(value, rest, update_fn) do
-            {:ok, updated} -> {:ok, Map.put(tree, key, updated)}
-            {:error, reason} -> {:error, reason}
-          end
-      end
-    else
-      :error -> {:error, "key #{key} not found"}
+          value ->
+            case update_in_tree(value, rest, update_fn) do
+              {:ok, updated} -> {:ok, Map.put(tree, key, updated)}
+              {:error, reason} -> {:error, reason}
+            end
+        end
+
+      :error ->
+        {:error, "key #{key} not found"}
     end
   end
 
