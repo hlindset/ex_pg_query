@@ -10,6 +10,8 @@ defmodule ExPgQuery.MixProject do
       elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      package: package(),
+      description: description(),
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
         coveralls: :test,
@@ -32,6 +34,25 @@ defmodule ExPgQuery.MixProject do
       source_url: "https://github.com/hlindset/ex_pg_query",
       docs: &docs/0
     ]
+  end
+
+  defp package do
+    [
+      name: "ex_pg_query",
+      licenses: ["MIT", "Apache-2.0"],
+      source_url: "https://github.com/hlindset/ex_pg_query",
+      homepage_url: "https://github.com/hlindset/ex_pg_query",
+      links: %{
+        "GitHub" => "https://github.com/hlindset/ex_pg_query"
+      }
+    ]
+  end
+
+  defp description do
+    """
+    Elixir library with a C NIF (based on libpg_query) for parsing,
+    fingerprinting, normalizing and truncating PostgreSQL queries.
+    """
   end
 
   defp docs do
