@@ -22,14 +22,14 @@ jobs:
       matrix:
         include:
           - pair:
-              elixir: 1.13
-              otp: 22
+              elixir: "1.13"
+              otp: "22"
           - pair:
-              elixir: 1.16
-              otp: 24
+              elixir: "1.16"
+              otp: "24"
           - pair:
-              elixir: 1.18
-              otp: 27
+              elixir: "1.18"
+              otp: "27"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Elixir
@@ -83,27 +83,16 @@ jobs:
     runs-on: macos-latest
     env:
       MIX_ENV: "prod"
-      OTP_VERSION: ${{ matrix.pair.otp }}
-      ELIXIR_VERSION: ${{ matrix.pair.elixir }}
+      ELIXIR_VERSION: ${{ matrix.elixir }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - pair:
-              elixir: 1.13
-              otp: 22
-          - pair:
-              elixir: 1.16
-              otp: 24
-          - pair:
-              elixir: 1.18
-              otp: 27
+        elixir: ["1.13.4-otp-22", "1.16.3-otp-24", "1.18.2-otp-27"]
     steps:
       - uses: actions/checkout@v4
       - name: Install erlang and elixir
         run: |
           brew install mise protobuf
-          mise use -g erlang@${OTP_VERSION}
           mise use -g elixir@${ELIXIR_VERSION}
           mix local.hex --force
           mix local.rebar --force
