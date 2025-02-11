@@ -2,12 +2,8 @@ name: Precompile NIFs
 
 on:
   push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
-  # push:
-  #   tags:
-  #     - "v*"
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: write
